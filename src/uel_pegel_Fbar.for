@@ -308,7 +308,7 @@
       real(wp)          :: DmatMU(nDim,nDim*nDim)
       real(wp)          :: DmatIU(nIons,nDim,nDim*nDim)
       real(wp)          :: MmatW(nDim,nDim)
-      real(wp)          :: MmatI(nIons,nIons,nDim,nDim)
+      real(wp)          :: MmatII(nIons,nIons,nDim,nDim)
       real(wp)          :: MmatWI(nIons,nDim,nDim)
       real(wp)          :: dJwdMu(nDim,1), dJwdOmg(nIons,nDim,1)
       real(wp)          :: dJidMu(nIons,nDim,1)
@@ -611,7 +611,7 @@
      &          stressPK2,Jw,dCwdt,Jion,dCiondt,
      &          Dmat,Cmat,
      &          aVectUM,dCwdotdF,DmatMU,dCwdotdMu,dJwdMu,MmatW,MmatWI,
-     &          aVectUI,dCidotdF,DmatIU,dCidotdMu,dJidOmg,MmatI,
+     &          aVectUI,dCidotdF,DmatIU,dCidotdMu,dJidOmg,MmatII,
      &          dCwdotdOmg,dCidotdOmg,dJwdOmg,dJidMu)
 
         !!!!!!!!!!!!!!! END CONSTITUTIVE CALCULATION !!!!!!!!!!!!!!!!!!
@@ -859,7 +859,7 @@
      &                  reshape( Nxi, [1, nNode] ) ) * dCidotdOmg(k,l)
      &          - matmul( matmul(dNdX, dJidOmg(k,l,:,:)),
      &                    reshape( Nxi, [1, nNode] ) )
-     &          + matmul(matmul(dNdX, MmatI(k,l,:,:)), transpose(dNdX))
+     &          + matmul(matmul(dNdX, MmatII(k,l,:,:)), transpose(dNdX))
      &          )
           end do
         end do
@@ -898,7 +898,7 @@
      &          stressPK2,Jw,dCwdt,Jion,dCiondt,
      &          Dmat,Cmat,
      &          aVectUM,dCwdotdF,DmatMU,dCwdotdMu,dJwdMu,MmatW,MmatWI,
-     &          aVectUI,dCidotdF,DmatIU,dCidotdMu,dJidOmg,MmatI,
+     &          aVectUI,dCidotdF,DmatIU,dCidotdMu,dJidOmg,MmatII,
      &          dCwdotdOmg,dCidotdOmg,dJwdOmg,dJidMu)
 
       use global_parameters
@@ -939,7 +939,7 @@
       real(wp), intent(out) :: DmatIU(nIons,nDim,nDim*nDim)
       real(wp), intent(out) :: MmatW(nDim,nDim)
       real(wp), intent(out) :: MmatWI(nIons,nDim,nDim)
-      real(wp), intent(out) :: MmatI(nIons,nIons,nDim,nDim)
+      real(wp), intent(out) :: MmatII(nIons,nIons,nDim,nDim)
       real(wp), intent(out) :: dJwdMu(nDim,1), dJwdOmg(nIons,nDim,1)
       real(wp), intent(out) :: dJidMu(nIons,nDim,1)
       real(wp), intent(out) :: dJidOmg(nIons,nIons,nDim,1)
@@ -1184,15 +1184,15 @@
 
 
       ! (3.3) calculate solute mobility matrix: Mion = Di*Ci/RT*inv(C)
-      MmatI     = zero
+      MmatII    = zero
       do k = 1, nIons
-        MmatI(k,k,:,:) = (Dion(k)*Cion_new(k)/RT)*Cinv(1:nDim,1:nDim)
+        MmatII(k,k,:,:) = (Dion(k)*Cion_new(k)/RT)*Cinv(1:nDim,1:nDim)
       end do
 
       ! (3.4) calculate the solute molar flux: Ji = - Mion*Grad(Omg)
       Jion            = zero
       do k = 1, nIons
-        Jion(k,:,:)   = - matmul( MmatI(k,k,:,:), dOmgdX(k,:,:) )
+        Jion(k,:,:)   = - matmul( MmatII(k,k,:,:), dOmgdX(k,:,:) )
       end do
 
       ! (3.5) calculate solvent-ion mobility matrix 
@@ -1222,10 +1222,14 @@
       dCwdMu    = dCwdPhi * dPhidMu
 
       ! (4.5) calculate dCw/dOmega
-      dCwdOmg   = - Cw_new/RT
+      do k = 1, nIons
+        dCwdOmg(k)  = - Cw_new/RT
+      end do
 
       ! (4.6) calculate dCion/dMu
-      dCiondMu  = - Cw_new/RT
+      do k = 1, nIons
+        dCiondMu(k) = - Cw_new/RT
+      end do
 
       ! (4.7) calculate dCion/dOmg
       dCiondOmg = zero                              ! initialize
