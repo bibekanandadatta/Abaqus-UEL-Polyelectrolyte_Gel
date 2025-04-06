@@ -19,15 +19,16 @@
 !     U4                PLANE STRAIN QUAD4 ELEMENT
 !
 ! **********************************************************************
+!
 ! Surface flux boundary conditions are supported in the following
-! elements.  Based on our convention, the face on which the fliud
+! elements. Based on the convention, the face on which the fliud
 ! flux is applied is the "label", i.e.
-! - U1,U2,U3,U4,... refer to chemical potential fluxes applied to 
+! - U1,U2,U3,U4,... refer to chemical potential fluxes applied to
 !   faces 1,2,3,4,... respectively,
 ! - Un1, Un2, Un3, Un4 .... refer to electrochemical potential fluxes
-!   applied to faces 1,2,3,4,... respectively, for n-th ion on the 
+!   applied to faces 1,2,3,4,... respectively, for n-th ion on the
 !
-!     
+!
 !              A eta (=xi_2)
 !  4-node      |
 !   quad       |Face 3
@@ -43,7 +44,7 @@
 !
 !  8-node     8-----------7
 !  brick     /|          /|       zeta
-!           / |         / |       
+!           / |         / |
 !          5-----------6  |       |     eta
 !          |  |        |  |       |   /
 !          |  |        |  |       |  /
@@ -81,7 +82,7 @@
 !       rho       = props(5)        Density of the gel
 !       Gshear    = props(6)        Shear modulus
 !       Kappa     = props(7)        Bulk modulus
-!       lam_L     = props(8)        Locking stretch (for AB model)
+!       lam_L     = props(8)        Locking stretch (only for AB model)
 !       Cp_fix    = props(9)        Referential concentration of charged polymer
 !       Vp        = props(10)       Molar volume of polymer
 !       Zp        = props(11)       Charge number of polymer
@@ -178,14 +179,15 @@
 ! **********************************************************************
 
       ! make sure to have the correct directory
-      include 'global_parameters.for'     ! global parameters module
-      include 'error_logging.for'         ! error/ debugging module
-      include 'linear_algebra.for'        ! linear algebra module
-      include 'lagrange_element.for'      ! Lagrange element module
-      include 'gauss_quadrature.for'      ! Guassian quadrature module
-      include 'nonlinear_solver.for'      ! Newton-Raphson solver module
-      include 'solid_mechanics.for'       ! solid mechanics module
-      include 'post_processing.for'       ! post-processing module
+      include '../module/global_parameters.for'     ! global parameters module
+      include '../module/error_logging.for'         ! error/ debugging module
+      include '../module/linear_algebra.for'        ! linear algebra module
+      include '../module/lagrange_element.for'      ! Lagrange element module
+      include '../module/gauss_quadrature.for'      ! Guassian quadrature module
+      include '../module/surface_integration.for'   ! surface integration module
+      include '../module/nonlinear_solver.for'      ! Newton-Raphson solver module
+      include '../module/solid_mechanics.for'       ! solid mechanics module
+      include '../module/post_processing.for'       ! post-processing module
 
 ! **********************************************************************
 ! **********************************************************************
@@ -216,6 +218,7 @@
       use global_parameters
       use error_logging
       use lagrange_element
+      use surface_integration
       use gauss_quadrature
       use solid_mechanics
       use linear_algebra
@@ -297,8 +300,10 @@
 
       ! constitutive output from the material point subroutine (UMAT)
       real(wp)          :: stressPK2(nStress,1)
-      real(wp)          :: Jw(nDim,1), Jion(nIons,nDim,1)
+      real(wp)          :: Jw(nDim,1)
+      real(wp)          :: Jion(nIons,nDim,1)
       real(wp)          :: dCwdt, dCiondt(nIons)
+
 
       ! constitutive (matetial) tangents output from the material point subroutine (UMAT)
       real(wp)          :: Dmat(nStress,nStress)
@@ -335,7 +340,7 @@
       real(wp)          :: tanFac1, tanFac2, resFac
 
 
-      ! optional output from the material point subroutine
+      ! optional output from the material point subroutine (UMAT)
       real(wp)          :: stressCauchy(nStress,1)
       real(wp)          :: stressPK1(nDim*nDim,1)
       real(wp)          :: strainLagrange(nStress,1)
@@ -358,12 +363,13 @@
       real(wp)          :: Kelem(nDOFEL,nDOFEL)
       real(wp)          :: Relem(nDOFEL,1)
 
-      ! variables defined for computing surface integratal
-      integer           :: ion, face, faceFlag
-      real(wp)          :: fluxApp, fluxNet, K_rate, dA
+
+      ! variables defined to compute surface integratal and fluxes
+      integer           :: ion, face
+      real(wp)          :: fluxApp, fluxNet, dA, K_rate
       real(wp)          :: mu_surf, omg_surf(nIons)
-      real(wp)          :: xLocal(nIntS), yLocal(nIntS), zLocal(nIntS)
-      real(wp)          :: wIntS(nIntS), NxiS(nNode)
+      real(wp)          :: xiSurf(nIntS,nDim), wIntS(nIntS), NxiS(nNode)
+
 
       integer           :: i, j, k, l, m, n, p, q, intPt
       integer           :: nstatev
@@ -414,31 +420,32 @@
       uAllMat   = reshape( uAll, shape=[uDOF+mDOF+nIons,nNode] )
       duAllMat  = reshape( duAll(:,1), shape=[uDOF+mDOF+nIons,nNode] )
 
+      ! seperate and store the degrees of freedom to individual arrays
       uNode(1:uDOF,1:nNode)   = uAllMat(1:uDOF,1:nNode)
 
       muNode(1:mDOFEL,1)      = uAllMat(uDOF+1,1:mDOFEL)
 
       do k = 1, nIons
-        omgNode(k,1:iDOFEL,1)   = uAllMat(uDOF+mDOF+k,1:iDOFEL)
+        omgNode(k,1:iDOFEL,1) = uAllMat(uDOF+mDOF+k,1:iDOFEL)
       end do
 
+      ! do the same for the delta of degrees of freedom
+      duNode(1:uDOF,1:nNode)    = duAllMat(1:uDOF,1:nNode)
 
-      duNode(1:uDOF,1:nNode)  = uAllMat(1:uDOF,1:nNode)
-
-      dMuNode(1:mDOFEL,1)     = uAllMat(uDOF+1,1:mDOFEL)
+      dMuNode(1:mDOFEL,1)       = duAllMat(uDOF+1,1:mDOFEL)
 
       do k = 1, nIons
-        dOmgNode(k,1:iDOFEL,1)  = uAllMat(uDOF+mDOF+k,1:iDOFEL)
+        dOmgNode(k,1:iDOFEL,1)  = duAllMat(uDOF+mDOF+k,1:iDOFEL)
       end do
 
-    
-      call eyeMat(ID)        ! create the identity matrix for the current analysis
 
-      
+      ! create the identity matrix for the current analysis (dimension-dependent)
+      call eyeMat(ID)
 
-      ! For fully-integrated linear quad and hex elements, calculate Gmat0.
-      ! These calculations are done to evaluate volumetric deformation
-      ! gradient at centroid which will be used in to define F-bar later.
+
+      ! For fully-integrated QUAD4 and HEX8 element, calculate Gmat0.
+      ! These calculations are done to evaluate volumetric deformation gradient
+      ! at the element centroid which will be used to calculate F-bar.
       if ( ((jtype .eq. 2) .and. (nInt .eq. 8))
      &    .or. ((jtype .eq. 4) .and. (nInt .eq. 4)) ) then
 
@@ -521,21 +528,21 @@
 
           ! form [Ba] matrix: 3D case
           if (analysis .eq. '3D') then
-            Ba(1,1)       = dNdx(i,1)
-            Ba(2,2)       = dNdx(i,2)
-            Ba(3,3)       = dNdx(i,3)
-            Ba(4,1:nDim)  = [  zero,      dNdx(i,3),  dNdx(i,2)]
-            Ba(5,1:nDim)  = [dNdx(i,3),     zero,     dNdx(i,1)]
-            Ba(6,1:nDim)  = [dNdx(i,2),   dNdx(i,1),    zero   ]
+            Ba(1,1)       = dNdX(i,1)
+            Ba(2,2)       = dNdX(i,2)
+            Ba(3,3)       = dNdX(i,3)
+            Ba(4,1:nDim)  = [  zero,      dNdX(i,3),  dNdX(i,2)]
+            Ba(5,1:nDim)  = [dNdX(i,3),     zero,     dNdX(i,1)]
+            Ba(6,1:nDim)  = [dNdX(i,2),   dNdX(i,1),    zero   ]
 
           ! form [Ba] matrix: plane stress/ plane strain case
           else if (analysis .eq. 'PE') then
-            Ba(1,1)       = dNdx(i,1)
-            Ba(2,2)       = dNdx(i,2)
-            Ba(3,1:nDim)  = [dNdx(i,2), dNdx(i,1)]
+            Ba(1,1)       = dNdX(i,1)
+            Ba(2,2)       = dNdX(i,2)
+            Ba(3,1:nDim)  = [dNdX(i,2), dNdX(i,1)]
           else
             call msg%ferror( flag=error, src='uel_pe_hydrogel',
-     &                msg='Wrong analysis', ch=analysis )
+     &                msg='Wrong analysis: ', ch=analysis )
             call xit
           end if
 
@@ -648,14 +655,15 @@
 
         !!!!!!!!!!!!!!!! RESIDUAL VECTOR CALCULATION !!!!!!!!!!!!!!!!!!
 
+        ! contribution of tractions and fluxes are ignored here
         ! mechanucal residual
         Ru  = Ru - wInt(intPt) * detJ * resFac *
      &           matmul( transpose(BNLmat), stressPK2 )
 
 
-        ! chemical residual
+        ! solvent residual
         Rm  = Rm + wInt(intPt) * detJ *
-     &      ( - reshape(Nxi, [nNode, 1]) * dCwdt + matmul(dNdX,Jw) )
+     &      ( - reshape(Nxi, [nNode,1]) * dCwdt + matmul(dNdX,Jw) )
 
 
         ! solute ion residuals
@@ -694,7 +702,6 @@
                     do n = 1,nDim
                       do p = 1,nDim
                         do q = 1,nDim
-
                           QR0Tensor(i,j,k,l) = QR0Tensor(i,j,k,l)
      &                        + third * F0InvT(k,l) *
      &                          (
@@ -729,8 +736,8 @@
      &              matmul(transpose(Gmat), matmul(QR0mat,Gmat0))
      &              - matmul(transpose(Gmat), matmul(QRmat,Gmat))
      &              )
-
         end if
+        ! end F-bar modification of the mechanical tangent for HEX8 element
 
 
         ! F-bar modification for fully-integrated plane strain bilinear quad element
@@ -748,12 +755,12 @@
                       do p = 1,nDim
                         do q = 1,nDim
                           QR0Tensor(i,j,k,l) = QR0Tensor(i,j,k,l)
-     &                        + half * Fbar(i,p) * Cmat(p,j,q,n)
-     &                        * Fbar(m,q) * Fbar(m,n) * F0InvT(k,l)
+     &                        + half * Fbar(i,p) * Cmat(p,j,m,n)
+     &                        * Fbar(q,m) * Fbar(q,n) * F0InvT(k,l)
 
                           QRTensor(i,j,k,l) = QRTensor(i,j,k,l)
-     &                        + half * Fbar(i,p) * Cmat(p,j,q,n)
-     &                        * Fbar(m,q) * Fbar(m,n) * FInvT(k,l)
+     &                        + half * Fbar(i,p) * Cmat(p,j,m,n)
+     &                        * Fbar(q,m) * Fbar(q,n) * FInvT(k,l)
                         end do
                       end do
                     end do
@@ -775,6 +782,7 @@
      &              )
 
         end if
+        ! end F-bar modification of the mechanical tangent for QUAD4 element
 
 
         ! mechanical-solvent tangent matrix
@@ -866,12 +874,97 @@
 
         !!!!!!!!!!!!!! END TANGENT MATRIX CALCULATION !!!!!!!!!!!!!!!!!
 
-
       end do
 
       !!!!!!!!!!!!!!!! END OF INTEGRATION POINT LOOP !!!!!!!!!!!!!!!!!!
 
 
+
+      !!!!!!!!!!!!!!!!!!!! FLUX BOUNDARY CONDITION !!!!!!!!!!!!!!!!!!!!
+
+      ! THIS PART OF THE CODE HAS NOT BEEN COMPLETELY TESTED YET
+      ! the code development follows Chester et al. (IJSS, 2015) and
+      ! and Narayan et al. (JMPS, 2022) to apply Robin boundary conditions
+      ! in HEX8 and QUAD4 elements (for ions and solvent)
+      ! apply traction/ pressure using the overlaying mechanical elements
+
+      if (ndload .gt. 0) then
+
+        K_rate = 10.0_wp
+
+        ! loop over all the applied surface fluxes
+        do i = 1, ndload
+
+          ion     = jdltyp(i,1)/10
+          face    = mod(jdltyp(i,1),10)
+          fluxApp = adlmag(i,1)
+
+          if (jtype .eq. 2) then          ! check flux faces for HEX8 element
+
+            if( (face .lt. 1) .and. (face .gt. 6) ) then
+              call msg%ferror( flag=error, src='uel_pe_hydrogel',
+     &             msg='Flux applied to unknown face: ', ia=face )
+              call xit
+            endif
+
+          elseif (jtype  .eq.  4) then    ! check flux faces for QUAD4 element
+            if( (face .lt. 1) .and. (face .gt. 4) ) then
+              call msg%ferror( flag=error, src='uel_pe_hydrogel',
+     &             msg='Flux applied to unknown face: ', ia=face )
+              call xit
+            endif
+
+          else                            ! flux BC not available for other element types
+            call msg%ferror( flag=error, src='uel_pe_hydrogel',
+     &               msg='Flux BC not available for element.', ia=jtype )
+            call xit
+          end if
+
+
+          ! get the surface integration points and weights
+          call getSurfGaussQuadrtr(face,wIntS,xiSurf)
+
+            ! loop over the surface integration points
+            do intPt = 1, nIntS
+
+              ! compute the surface area for 3D element
+              call computeSurfArea(xiSurf(intPt,:),face,coords,NxiS,dA)
+
+              ! add contribution to the residuals and tangent matrix
+              if (ion .eq. 0) then                      ! for solvent
+                mu_surf = dot_product(NxiS, reshape(muNode, [mDOFEL]))
+                fluxNet = - K_rate * (fluxApp - mu_surf)
+
+                Rm  = Rm
+     &              - wIntS(intPt)*dA*reshape(NxiS,[nNode,1])*fluxNet
+
+                Kmm = Kmm + wIntS(intPt) * dA * K_rate *
+     &                matmul( reshape(NxiS, [nNode, 1]),
+     &                      reshape(NxiS, [1, nNode]) )
+
+              else                                      ! for ions
+                omg_surf(ion)  =
+     &            dot_product(NxiS, reshape(omgNode(ion,:,1), [iDOFEL]))
+                fluxNet   = - K_rate * (fluxApp - omg_surf(ion))
+
+                Ri(ion,:,:) = Ri(ion,:,:)
+     &              - wIntS(intPt)*dA*reshape(NxiS,[nNode,1])*fluxNet
+
+                Kii(ion,ion,:,:) =  Kii(ion,ion,:,:)
+     &                      + wIntS(intPt) * dA * K_rate *
+     &                      matmul( reshape(NxiS, [nNode, 1]),
+     &                      reshape(NxiS, [1, nNode]) )
+              end if
+
+            end do
+            ! end surface integration point loop
+
+        end do
+        ! end the loop over the flux forces (ndload)
+
+      end if
+
+      !!!!!!!!!!!!!!!!!! END FLUX BOUNDARY CONDITION !!!!!!!!!!!!!!!!!!
 
 
 
@@ -882,9 +975,12 @@
      &          Kelem,Relem)
 
 
+
       ! assign them to Abaqus-defined vaiables amatrix and rhs
       amatrx(1:NDOFEL,1:NDOFEL) = Kelem(1:NDOFEL,1:NDOFEL)
       rhs(1:NDOFEL,1)           = Relem(1:NDOFEL,1)
+
+
 
       end subroutine uel_pe_hydrogel
 
@@ -976,7 +1072,8 @@
 
       ! local tangent tensors and related quantities
       real(wp)          :: dCwdPhi, dMudPhi, dPhidMu
-      real(wp)          :: dCwdMu, dCwdOmg(nIons)
+      real(wp)          :: dCwdMu, dMudCw
+      real(wp)          :: dCwdOmg(nIons)
       real(wp)          :: dCiondMu(nIons), dCiondOmg(nIons,nIons)
       real(wp)          :: dMudFTensor(3,3)
       real(wp)          :: dOmgdFTensor(nIons,3,3)
@@ -990,6 +1087,9 @@
       real(wp)          :: JiTensor(nIons,nDim,nDim,nDim)
       real(wp)          :: dCwdotdFTensor(3,3)
       real(wp)          :: dCidotdFTensor(nIons,3,3)
+      real(wp)          :: dCdFvect(nIons+1,1)
+      real(wp)          :: dGdCmat(nIons+1,nIons+1)
+      real(wp)          :: dGdFvect(nIons+1,1)
 
 
       ! intermeidate variables for post-processing and output
@@ -1015,6 +1115,8 @@
       real(wp)          :: mu0, Vw, chi, Dw
       real(wp)          :: Cion0(nIons), omg0(nIons), Vion(nIons)
       real(wp)          :: Zion(nIons), Dion(nIons)
+
+
 
       integer           :: i, j, k, l, m, n
       integer           :: nIonProps
@@ -1068,9 +1170,9 @@
       detF    = det(F)
 
       if (detF .le. zero) then
-        call msg%ferror(flag=error, src='umat_pe_hydrogel',
+        call msg%ferror( flag=error, src='umat_pe_hydrogel',
      &        msg='Issue with volume change (detF, jelem, intPt)',
-     &        ra= detF, ivec=[jelem, intpt])
+     &        ra= detF, ivec=[jelem, intpt] )
         call xit
       end if
 
@@ -1130,7 +1232,7 @@
       ! print *, kstep, kinc, time(1), jelem, intpt
       call fsolve(electroChemicalState, rootsOld, roots,
      &              .true., vars=vars)
-      
+
 
       ! retrieve all the solutions for further usage
       Cw_new            = roots(1)
@@ -1159,7 +1261,7 @@
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
       !! element residual related material quantities
-      ! (1) stress tensors 
+      ! (1) stress tensors
       stressTensorPK2 = Gshear * ( ID3 - (phi0)**(two/three) * CInv )
      &                  + Kappa * phi0 * detFs * log(detFe) * CInv
 
@@ -1185,6 +1287,7 @@
 
       ! (3.3) calculate solute mobility matrix: Mion = Di*Ci/RT*inv(C)
       MmatII    = zero
+
       do k = 1, nIons
         MmatII(k,k,:,:) = (Dion(k)*Cion_new(k)/RT)*Cinv(1:nDim,1:nDim)
       end do
@@ -1195,7 +1298,7 @@
         Jion(k,:,:)   = - matmul( MmatII(k,k,:,:), dOmgdX(k,:,:) )
       end do
 
-      ! (3.5) calculate solvent-ion mobility matrix 
+      ! (3.5) calculate solvent-ion mobility matrix
       MmatWI    = zero              ! no cross-diffusion in this model
 
 
@@ -1221,17 +1324,20 @@
       ! (4.4) Calculate dCw/dMu
       dCwdMu    = dCwdPhi * dPhidMu
 
-      ! (4.5) calculate dCw/dOmega
+      ! (4.5) Calculate dMu/dCw
+      dMudCw    = one/dCwdMu
+
+      ! (4.6) calculate dCw/dOmega
       do k = 1, nIons
         dCwdOmg(k)  = - Cw_new/RT
       end do
 
-      ! (4.6) calculate dCion/dMu
+      ! (4.7) calculate dCion/dMu
       do k = 1, nIons
         dCiondMu(k) = - Cw_new/RT
       end do
 
-      ! (4.7) calculate dCion/dOmg
+      ! (4.8) calculate dCion/dOmg
       dCiondOmg = zero                              ! initialize
 
       do k = 1, nIons
@@ -1244,22 +1350,61 @@
       ! (5.1) calculate dMu/dF
       dMudFTensor   = Kappa * Vw * ( log(detFe) - one ) * FInvT
 
-      ! (5.2) calculate dCw/dF
-      dCwdFTensor   = - dCwdMu * dMudFTensor
-
-      ! (5.3) calculate dOmg/dF
+      ! (5.2) calculate dOmg/dF
       dOmgdFTensor  = zero
       do k = 1, nIons
-        dOmgdFTensor(k,:,:) = - ( two*Gshear*phi_new/(three*phi0)*F 
+        dOmgdFTensor(k,:,:) = - ( two*Gshear*phi_new/(three*phi0)*F
      &                        + kappa*Vw*FInvT ) * Vion(k)
       end do
 
-      ! (5.4) calculate dCion/dF
-      dCiondFTensor   = zero                      ! initialize
 
-      do k = 1, nIons
-        dCiondFTensor(k,:,:) = - dCiondOmg(k,k) * dOmgdFTensor(k,:,:)
+      ! (5.3) and (5.4): Calculate dCw/dF and dCion/dF
+      do k = 1,3
+        do l = 1,3
+
+          ! right hand side vector
+          dGdFvect(1,1)         = dMudFTensor(k,l)
+          dGdFvect(2:nIons+1,1) = dOmgdFTensor(1:nIons,k,l)
+
+          ! first diagonal entry
+          dGdCmat(1,1)          = dMudCw
+
+          ! first row of the matrix
+          do i = 1, nIons
+            dGdCmat(1,i+1)      = - RT/Cw_new
+     &                  + (phi_new**two/phi0) * Vw * Vion(i) *
+     &                    ( Gshear/(three*phi0)  *
+     &                    ( trC - three*(phi0)**(two/three) )
+     &                  + Kappa/phi_new )
+          end do
+          ! first column of the matrix
+          dGdCmat(2:nIons+1,1)  = - RT/Cw_new
+          ! rest of the diagonal entries
+          do i = 1, nIons
+            dGdCmat(i+1,i+1)    = RT/Cion_new(i)
+          end do
+
+          ! solution for each k,L component
+          dCdFvect    = - matmul(Inv(dGdCmat), dGdFvect)
+
+          ! put them into appropriate tensors: dCw/dF and dCion/dF
+          dCwdFTensor(k,l)            = dCdFvect(1,1)
+          dCiondFTensor(1:nIons,k,l)  = dCdFvect(2:nIons+1,1)
+
+        end do
       end do
+
+
+      ! ! an alternative simplified approximation of (5.3) and (5.4)
+      ! ! (5.3) calculate dCw/dF
+      ! dCwdFTensor   = - dCwdMu * dMudFTensor
+
+
+      ! ! (5.4) calculate dCion/dF
+      ! dCiondFTensor   = zero                    ! initialize
+      ! do k = 1, nIons
+      !   dCiondFTensor(k,:,:) = - dCiondOmg(k,k) * dOmgdFTensor(k,:,:)
+      ! end do
 
 
       ! (5.5) calculate dCw/dC (symmetric second-order tensor)
@@ -1267,7 +1412,7 @@
       do i = 1, 3
         do j = 1, 3
           do l = 1, 3
-            dCwdCTensor(i,j) = dCwdCTensor(i,j) 
+            dCwdCTensor(i,j) = dCwdCTensor(i,j)
      &                        + half * dCwdFTensor(l,i) * Finv(j,l)
           end do
         end do
@@ -1321,7 +1466,7 @@
           do l = 1, nDim
             do j = 1, nDim               ! summation over dummy index j
               JwTensor(i,k,l) = JwTensor(i,k,l)
-     &            + (Dw*Cw_new)/RT 
+     &            + (Dw*Cw_new)/RT
      &            * ( FInv(i,k)*CInv(l,j) ) * dMudX(j,1)
      &            - (Dw/RT) * CInv(i,j) * dMudX(j,1) * dCwdFTensor(k,l)
             end do
@@ -1346,7 +1491,7 @@
             do l = 1, nDim
               do j = 1, nDim               ! summation over dummy index j
                 JiTensor(n,i,k,l) = JiTensor(n,i,k,l)
-     &            + ( Dion(n)*Cion_new(n) )/RT 
+     &            + ( Dion(n)*Cion_new(n) )/RT
      &            * ( FInv(i,k)*CInv(l,j) ) * dOmgdX(n,j,1)
      &            - ( Dion(n)/RT ) * CInv(i,j)
      &              * dOmgdX(n,j,1) * dCiondFTensor(n,k,l)
@@ -1376,7 +1521,7 @@
 
       ! (10.2) calculate dJwdOmg
       do k = 1, nIons
-        dJwdOmg(k,:,:) = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX) 
+        dJwdOmg(k,:,:) = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX)
      &                    * dCwdOmg(k)
       end do
 
@@ -1392,9 +1537,9 @@
         dJidOmg(k,k,:,:) = - (Dion(k)/RT) *
      &        matmul(CInv(1:nDim,1:nDim),dOmgdX(k,:,:))*dCiondOmg(k,k)
       end do
-      
 
-      
+
+
 
       ! (11) All other time derivatives
       dCwdotdMu       = dCwdMu/dtime
@@ -1451,9 +1596,9 @@
       call voigtVectorTruncate(strainVectEuler,strainEuler)
       call voigtVectorTruncate(stressVectCauchy,stressCauchy)
 
-      
+
       ! save the variables to be post-processed in globalPostVars
-      ! more variables can be added for element level output      
+      ! more variables can be added for element level output
       globalPostVars(jelem,intPt,1:nStress)
      &                      = stressCauchy(1:nStress,1)
 
@@ -1476,7 +1621,7 @@
 ! **********************************************************************
 
       subroutine electroChemicalState(x, fvec, fjac, vars)
-      
+
       ! list of independent variables:
       ! x(1)          = Cw              (Concentration of solvent)
       ! x(2:nIons+1)  = Cion(1:nIons)   (Concentration of ions)
@@ -1605,7 +1750,7 @@
       !!!!!!!!!!!!!!!!!!! END LOCAL RESIDUAL VECTOR !!!!!!!!!!!!!!!!!!!!
 
 
-      
+
       !!!!!!!!!!!!!!!!!!!!! LOCAL JACOBIAN MATRIX !!!!!!!!!!!!!!!!!!!!!!
 
       if ( present(fjac) ) then
@@ -1613,7 +1758,7 @@
         fjac  = zero
 
         term1 = ( Gshear/(three*phi0) ) *
-     &          ( I1 - three*(phi0)**(two/three) ) + Kappa/phi 
+     &          ( I1 - three*(phi0)**(two/three) ) + Kappa/phi
 
         fjac(1,1) = -(Vw/phi0) * phi**two  *
      &            (
@@ -1892,6 +2037,7 @@
         call xit
       end if
 
+      ! no of surface integration points for calculating flux
       if (jtype .eq. 2) then
         nIntS = 4
       else if (jtype .eq. 4) then
