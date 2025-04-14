@@ -19,49 +19,6 @@
 !     U4                PLANE STRAIN QUAD4 ELEMENT
 !
 ! **********************************************************************
-!
-! Surface flux boundary conditions are supported in the following
-! elements. Based on the convention, the face on which the fliud
-! flux is applied is the "label", i.e.
-! - U1,U2,U3,U4,... refer to chemical potential fluxes applied to
-!   faces 1,2,3,4,... respectively,
-! - Un1, Un2, Un3, Un4 .... refer to electrochemical potential fluxes
-!   applied to faces 1,2,3,4,... respectively, for n-th ion on the
-!
-!
-!              A eta (=xi_2)
-!  4-node      |
-!   quad       |Face 3
-!        4-----------3
-!        |     |     |
-!        |     |     |
-!  Face 4|     ------|---> xi (=xi_1)
-!        |           | Face2
-!        |           |
-!        1-----------2
-!          Face 1
-!
-!
-!  8-node     8-----------7
-!  brick     /|          /|       zeta
-!           / |         / |
-!          5-----------6  |       |     eta
-!          |  |        |  |       |   /
-!          |  |        |  |       |  /
-!          |  4--------|--3       | /
-!          | /         | /        |/
-!          |/          |/         O--------- xi
-!          1-----------2        origin at cube center
-!
-!  Convention for face numbering is as follows:
-!       Face 1 = nodes 1,2,3,4  (bottom)
-!       Face 2 = nodes 5,8,7,6  (top)
-!       Face 3 = nodes 1,5,6,2  (front)
-!       Face 4 = nodes 2,6,7,3  (right)
-!       Face 5 = nodes 3,7,8,4  (rear)
-!       Face 6 = nodes 4,8,5,1  (left)
-!
-! **********************************************************************
 !          VOIGT NOTATION CONVENTION FOR STRESS/ STRAIN TENSORS
 !
 !       In this subroutine we adopted the following convention for
@@ -92,7 +49,7 @@
 !       Dw        = props(15)       Diffusion coefficient of the solvent
 !
 !       Cion0(k)  = props( 16+nIonProps*(k-1) )   Initial concentration of ions
-!       omg0(k)   = props( 17+nIonProps*(k-1) )   Reference electrochemical potential
+!       Omg0(k)   = props( 17+nIonProps*(k-1) )   Reference electrochemical potential
 !       Vion(k)   = props( 18+nIonProps*(k-1) )   Molar volume of ions
 !       Zion(k)   = props( 19+nIonProps*(k-1) )   Charge of ions
 !       Dion(k)   = props( 20+nIonProps*(k-1) )   Diffusivity of ions
@@ -102,9 +59,10 @@
 !                        LIST OF ELEMENT PROPERTIES
 !
 !     jprops(1)   = nInt            no of integration points for vector part
-!     jprops(2)   = matID           constitutive model for elastomeric network
-!     jprops(3)   = nIonProps       no of properties for each ion
-!     jprops(4)   = nPostVars       no of local (int pt) post-processing variables
+!     jprops(2)   = fbarFlag        flag to use F-bar modification or not
+!     jprops(3)   = matID           constitutive model for elastomeric network
+!     jprops(4)   = nIonProps       no of properties for each ion
+!     jprops(5)   = nPostVars       no of local (int pt) post-processing variables
 !
 ! **********************************************************************
 !
@@ -188,7 +146,6 @@
       include '../module/nonlinear_solver.for'      ! Newton-Raphson solver module
       include '../module/solid_mechanics.for'       ! solid mechanics module
       include '../module/post_processing.for'       ! post-processing module
-
 ! **********************************************************************
 ! **********************************************************************
 
@@ -218,8 +175,8 @@
       use global_parameters
       use error_logging
       use lagrange_element
-      use surface_integration
       use gauss_quadrature
+      use surface_integration
       use solid_mechanics
       use linear_algebra
 
@@ -255,57 +212,85 @@
       ! variables local to the subroutine
       real(wp)          :: ID(nDim,nDim)
 
-      ! degrees of freedom and field variables
+      ! degrees of freedom
       real(wp)          :: UallMat(uDOF+mDOF+nIons,nNode)
       real(wp)          :: DUallMat(uDOF+mDOF+nIons,nNode)
       real(wp)          :: uNode(uDOF,nNode), duNode(uDOF,nNode)
       real(wp)          :: muNode(mDOFEL,1), dMuNode(mDOFEL,1)
-      real(wp)          :: omgNode(nIons,iDOFEL,1)
+      real(wp)          :: OmgNode(nIons,iDOFEL,1)
       real(wp)          :: dOmgNode(nIons,iDOFEL,1)
 
-      ! finite element related variables
+      ! additional field variables at the nodes and integration point
+      real(wp)          :: fieldNode(npredf,nNode)
+      real(wp)          :: dfieldNode(npredf,nNode)
+
+
+      ! finite element parameters (integration and shape functions)
       real(wp)          :: wInt(nInt), xiInt(nInt,nDim)
       real(wp)          :: Nxi(nNode), dNdxi(nNode,nDim)
       real(wp)          :: dXdxi(nDim,nDim), dxidX(nDim,nDim)
-      real(Wp)          :: detJ, dNdX(nNode,nDim)
-      real(wp)          :: Na(nDim,nDim), Nmat(nStress,uDOFEl)
-      real(wp)          :: Ba(nStress,nDim), Bmat(nStress,uDOFEl)
+      real(Wp)          :: dNdX(nNode,nDim), detJ
+
+      ! finite element matrix operators
+      real(wp)          :: Na(nDim,nDim)
+      real(wp)          :: Ba(nStress,nDim)
       real(wp)          :: Ga(nDim*nDim,nDim)
+      real(wp)          :: Nmat(nDim,uDOFEl)
+      real(wp)          :: NmatT(uDOFEL,nDim)
+      real(wp)          :: Bmat(nStress,uDOFEl)
+      real(wp)          :: BmatT(uDOFEL,nStress)
       real(wp)          :: Gmat(nDim*nDim,nDim*nNode)
+      real(wp)          :: GmatT(nDim*nNode,nDim*nDim)
+      real(wp)          :: NmatScalar(1,nNode)
+      real(wp)          :: NmatScalarT(nNode,1)
+      real(wp)          :: BmatScalar(nDim,nNode)
+      real(wp)          :: BmatScalarT(nNode,nDim)
 
       ! additional reshaped matrices for element formulation
       real(wp)          :: stressTensorPK2(nDim,nDim)
       real(wp)          :: SIGMA_S(nDim**2,nDim**2)
       real(wp)          :: SIGMA_F(nDim*nNode,nDim*nNode)
       real(wp)          :: BNLmat(nStress,nDim*nNode)
+      real(wp)          :: BNLmatT(nDim*nNode,nStress)
+
+
+      ! additional variables for F-bar method (element and material)
+      logical           :: fbarFlag
+      real(wp)          :: centroid(nDim)
+      real(wp)          :: Nxi0(nNode), dNdxi0(nNode,nDim)
+      real(wp)          :: dXdxi0(nDim,nDim), dxidX0(nDim,nDim)
+      real(wp)          :: dNdX0(nNode,nDim), detJ0
+      real(wp)          :: Ga0(nDim*nDim,nDim)
+      real(wp)          :: Gmat0(nDim*nDim,uDOFEl)
+      real(wp)          :: F0(3,3), detF0
+      real(wp)          :: F0Inv(3,3), F0InvT(3,3)
+      real(wp)          :: QR0Tensor(nDim,nDim,nDim,nDim)
+      real(wp)          :: QRTensor(nDim,nDim,nDim,nDim)
+      real(wp)          :: QR0mat(nDim*nDim,nDim*nDim)
+      real(wp)          :: QRmat(nDim*nDim,nDim*nDim)
+      real(wp)          :: tanFac1, tanFac2, resFac
 
 
       ! integration point quantities (variables)
       real(wp)          :: coord_ip(nDim,1)
       real(wp)          :: F(3,3), detF, Fbar(3,3)
       real(wp)          :: FInv(3,3), FInvT(3,3)
-      real(wp)          :: mu, omg(nIons)
+      real(wp)          :: mu, Omg(nIons)
       real(wp)          :: dMudX(nDim,1), dOmgdX(nIons,nDim,1)
-
-
-      ! additional field variables at the nodes and integration point
-      real(wp)          :: fieldNode(npredf,nNode)
-      real(wp)          :: dfieldNode(npredf,nNode)
       real(wp)          :: fieldVar(npredf), dfieldVar(npredf)
 
-
       ! element and material properties used in this subroutine
-      integer           :: matID, nIonProps
+      integer               :: matID      ! material constitutive law
+      integer               :: nIonProps
+      real(wp), allocatable :: statev(:)  ! state variables per int pt
 
 
-      ! constitutive output from the material point subroutine (UMAT)
+      ! constitutive output from the material subroutine (UMAT)
       real(wp)          :: stressPK2(nStress,1)
-      real(wp)          :: Jw(nDim,1)
-      real(wp)          :: Jion(nIons,nDim,1)
-      real(wp)          :: dCwdt, dCiondt(nIons)
+      real(wp)          :: dCwdt, Jw(nDim,1)
+      real(wp)          :: dCiondt(nIons), Jion(nIons,nDim,1)
 
-
-      ! constitutive (matetial) tangents output from the material point subroutine (UMAT)
+      ! constitutive tangents output from the material subroutine (UMAT)
       real(wp)          :: Dmat(nStress,nStress)
       real(wp)          :: Cmat(3,3,3,3)
       real(wp)          :: aVectUM(nDim*nDim,1)
@@ -315,6 +300,7 @@
       real(wp)          :: MmatW(nDim,nDim)
       real(wp)          :: MmatII(nIons,nIons,nDim,nDim)
       real(wp)          :: MmatWI(nIons,nDim,nDim)
+      real(wp)          :: MmatIW(nIons,nDim,nDim)
       real(wp)          :: dJwdMu(nDim,1), dJwdOmg(nIons,nDim,1)
       real(wp)          :: dJidMu(nIons,nDim,1)
       real(wp)          :: dJidOmg(nIons,nIons,nDim,1)
@@ -325,29 +311,12 @@
       real(wp)          :: dCidotdOmg(nIons,nIons)
 
 
-      ! additional variables for F-bar method (element and material)
-      real(wp)          :: centroid(nDim)
-      real(wp)          :: Nxi0(nNode), dNdxi0(nNode,nDim)
-      real(wp)          :: dXdxi0(nDim,nDim), dxidX0(nDim,nDim)
-      real(wp)          :: dNdX0(nNode,nDim), detJ0
-      real(wp)          :: Ga0(nDim**2,nDim), Gmat0(nDim**2,uDOFEl)
-      real(wp)          :: F0(3,3), detF0
-      real(wp)          :: F0Inv(3,3), F0InvT(3,3)
-      real(wp)          :: QR0Tensor(nDim,nDim,nDim,nDim)
-      real(wp)          :: QRTensor(nDim,nDim,nDim,nDim)
-      real(wp)          :: QR0mat(nDim*nDim,nDim*nDim)
-      real(wp)          :: QRmat(nDim*nDim,nDim*nDim)
-      real(wp)          :: tanFac1, tanFac2, resFac
 
+      ! element residual vectors and tangent matrix components
+      real(wp)          :: Ru(uDOFEL,1)
+      real(wp)          :: Rm(mDOFEL,1)
+      real(wp)          :: Ri(nIons,iDOFEL,1)
 
-      ! optional output from the material point subroutine (UMAT)
-      real(wp)          :: stressCauchy(nStress,1)
-      real(wp)          :: stressPK1(nDim*nDim,1)
-      real(wp)          :: strainLagrange(nStress,1)
-      real(wp)          :: strainEuler(nStress,1)
-
-
-      ! tangent matrix components and residual vectors
       real(wp)          :: Kuu(uDOFEL,uDOFEL)
       real(wp)          :: Kum(uDOFEL,mDOFEL)
       real(wp)          :: Kmu(mDOFEL,uDOFEL)
@@ -357,19 +326,9 @@
       real(wp)          :: Kiu(nIons,iDOFEL,uDOFEL)
       real(wp)          :: Kim(nIons,iDOFEL,mDOFEL)
       real(wp)          :: Kii(nIons,nIons,iDOFEL,iDOFEL)
-      real(wp)          :: Ru(uDOFEL,1)
-      real(wp)          :: Rm(mDOFEL,1)
-      real(wp)          :: Ri(nIons,iDOFEL,1)
+
       real(wp)          :: Kelem(nDOFEL,nDOFEL)
       real(wp)          :: Relem(nDOFEL,1)
-
-
-      ! variables defined to compute surface integratal and fluxes
-      integer           :: ion, face
-      real(wp)          :: fluxApp, fluxNet, dA, K_rate
-      real(wp)          :: mu_surf, omg_surf(nIons)
-      real(wp)          :: xiSurf(nIntS,nDim), wIntS(nIntS), NxiS(nNode)
-
 
       integer           :: i, j, k, l, m, n, p, q, intPt
       integer           :: nstatev
@@ -382,8 +341,6 @@
      &                    nNode=nNode, nInt=nInt)
 
 
-      ! N_mu = transpose(Nxi), B_mu = transpose(dNdX) in the theory
-      ! same goes for the ion-related matrix operators
       F0      = zero
       Fbar    = zero
       Ga0     = zero
@@ -397,6 +354,9 @@
       Gmat    = zero
       SIGMA_F = zero
       SIGMA_S = zero
+      Ru      = zero
+      Rm      = zero
+      Ri      = zero
       Kuu     = zero
       Kum     = zero
       Kui     = zero
@@ -406,15 +366,19 @@
       Kiu     = zero
       Kim     = zero
       Kii     = zero
-      Ru      = zero
-      Rm      = zero
-      Ri      = zero
+
 
       ! read the initial electrochemical state from properties
-      matID     = jprops(2)
-      nIonProps = jprops(3)
+      matID     = jprops(3)
+      nIonProps = jprops(4)
       nstatev   = nsvars/nint
 
+      ! set the F-bar flag based on the input
+      if (jprops(2) .eq. 0) then
+        fbarFlag = .false.
+      else
+        fbarFlag = .true.
+      end if
 
       ! reshape all the nodal degrees of freedom for calculations
       uAllMat   = reshape( uAll, shape=[uDOF+mDOF+nIons,nNode] )
@@ -426,7 +390,7 @@
       muNode(1:mDOFEL,1)      = uAllMat(uDOF+1,1:mDOFEL)
 
       do k = 1, nIons
-        omgNode(k,1:iDOFEL,1) = uAllMat(uDOF+mDOF+k,1:iDOFEL)
+        OmgNode(k,1:iDOFEL,1) = uAllMat(uDOF+mDOF+k,1:iDOFEL)
       end do
 
       ! do the same for the delta of degrees of freedom
@@ -444,47 +408,56 @@
 
 
       ! For fully-integrated QUAD4 and HEX8 element, calculate Gmat0.
-      ! These calculations are done to evaluate volumetric deformation gradient
-      ! at the element centroid which will be used to calculate F-bar.
-      if ( ((jtype .eq. 2) .and. (nInt .eq. 8))
-     &    .or. ((jtype .eq. 4) .and. (nInt .eq. 4)) ) then
+      ! These calculations are done to evaluate volumetric deformation
+      ! gradient at the element centroid to calculate F-bar.
+      if (fbarFlag .eq. .true.) then
 
-        centroid = zero
+        if ( ((jtype .eq. 2) .and. (nInt .eq. 8))
+     &      .or. ((jtype .eq. 4) .and. (nInt .eq. 4)) ) then
 
-        ! evaluate the interpolation functions and derivates at centroid
-        call calcInterpFunc(hydrogel, centroid, Nxi0, dNdxi0)
+          centroid = zero
 
-        ! calculate element jacobian and global shape func gradient at centroid
-        dXdxi0  = matmul(coords,dNdxi0)       ! calculate the jacobian (dXdxi) at centroid
-        detJ0   = det(dXdxi0)                 ! calculate jacobian determinant at centroid
+          ! evaluate the interpolation functions and derivates at centroid
+          call calcInterpFunc(hydrogel, centroid, Nxi0, dNdxi0)
 
-        if (detJ0 .le. zero) then
+          ! calculate element jacobian and global shape func gradient at centroid
+          dXdxi0  = matmul(coords,dNdxi0)       ! calculate the jacobian (dXdxi) at centroid
+          detJ0   = det(dXdxi0)                 ! calculate jacobian determinant at centroid
+
+          if (detJ0 .le. zero) then
+            call msg%ferror( flag=warn, src='uel_pe_hydrogel',
+     &      msg='Negative element jacobian at centroid: ', ia=jelem)
+          call xit
+          end if
+
+          dxidX0 = inv(dXdxi0)                  ! calculate jacobian inverse
+          dNdX0  = matmul(dNdxi0,dxidX0)        ! calculate dNdX at centroid
+
+          do i=1,nNode
+
+            ! form the nodal-level matrix: [Ga0] at the centroid
+            do j = 1, nDim
+              Ga0(nDim*(j-1)+1:nDim*j, 1:nDim) = dNdX0(i,j)*ID
+            end do
+
+            ! form the [G0] matrix at the centroid
+            Gmat0(1:nDim**2,nDim*(i-1)+1:nDim*i) = Ga0(1:nDim**2,1:nDim)
+          end do                             ! end of nodal point loop
+
+
+          F0(1:nDim,1:nDim) = ID + matmul(uNode,dNdX0)
+
+          if (analysis .eq. 'PE') F0(3,3) = one
+
+          detF0   = det(F0)
+          F0Inv   = inv(F0)
+          F0InvT  = transpose(F0Inv)
+
+        else
           call msg%ferror( flag=warn, src='uel_pe_hydrogel',
-     &      msg='Negative element jacobian at centroid.', ia=jelem)
+     &      msg='F-bar is not available: ', ivec=[jtype, nInt])
           call xit
         end if
-
-        dxidX0 = inv(dXdxi0)                  ! calculate jacobian inverse
-        dNdX0  = matmul(dNdxi0,dxidX0)        ! calculate dNdX at centroid
-
-        do i=1,nNode
-
-          ! form the nodal-level matrix: [Ga0] at the centroid
-          do j = 1, nDim
-            Ga0(nDim*(j-1)+1:nDim*j, 1:nDim) = dNdX0(i,j)*ID
-          end do
-
-          ! form the [G0] matrix at the centroid
-          Gmat0(1:nDim**2,nDim*(i-1)+1:nDim*i) = Ga0(1:nDim**2,1:nDim)
-        end do                             ! end of nodal point loop
-
-        F0(1:nDim,1:nDim) = ID + matmul(uNode,dNdX0)
-
-        if (analysis .eq. 'PE') F0(3,3) = one
-
-        detF0   = det(F0)
-        F0Inv   = inv(F0)
-        F0InvT  = transpose(F0Inv)
 
       end if
       ! end of centroid level calculation for F-bar
@@ -492,7 +465,6 @@
 
       ! get the weights and coordinates for gauss quadrature
       call getGaussQuadrtr(hydrogel,wInt,xiInt)
-
 
 
       !!!!!!!!!!!!!!!!!!!! INTEGRATION POINT LOOP !!!!!!!!!!!!!!!!!!!!!
@@ -507,7 +479,7 @@
 
         if (detJ .lt. zero) then
           call msg%ferror(flag=warn, src='uel_pe_hydrogel',
-     &         msg='Negative element jacobian', ia=jelem, ra=detJ)
+     &         msg='Negative element jacobian: ', ia=jelem, ra=detJ)
           call xit
         end if
 
@@ -552,6 +524,17 @@
           Gmat(1:nDim**2,nDim*(i-1)+1:nDim*i) = Ga(1:nDim**2,1:nDim)
         end do
 
+        ! transpose the vector field matrix operators
+        NmatT       = transpose(Nmat)
+        BmatT       = transpose(Bmat)
+        GmatT       = transpose(Gmat)
+
+        ! all the scalar matrix operators for the element
+        NmatScalar  = reshape(Nxi, [1, nNode])
+        NmatScalarT = transpose(NmatScalar)
+        BmatScalar  = transpose(dNdX)
+        BmatScalarT = dNdX
+
         !!!!!!!!!!!!! END CALCULATING ELEMENT OPERATORS !!!!!!!!!!!!!!!
 
 
@@ -566,60 +549,68 @@
 
         if (analysis .eq. 'PE')  F(3,3) = one
 
-
-        ! calculate solvent chemical potential and its gradient
-        mu    = dot_product( Nxi, reshape(muNode, [mDOFEL] ) )
-        dMudX = matmul( transpose(dNdX), muNode )
-
-        ! calculate ions' electrochemical potentials and their gradients
-        do k = 1, nIons
-          omg(k)  = dot_product(Nxi, reshape(omgNode(k,:,1), [iDOFEL]))
-          dOmgdX(k,:,:) = matmul( transpose(dNdX),
-     &                            reshape(omgNode(k,:,1), [iDOFEL,1]) )
-        end do
-
-
-        ! F-bar modification
-        ! calculate material point jacobian (volume change)
+        ! calculate jacobian (volume change) at the current integration pt
         detF    = det(F)
         FInv    = inv(F)
         FInvT   = transpose(FInv)
 
 
-        ! definition of modified deformation gradient
-        if ( (jtype .eq. 2) .and. (nInt .eq. 8) ) then
-          ! fully-integrated three-dimensional trilinear hex element
-          Fbar    = (detF0/detF)**(third) * F
-          resFac  = (detF0/detF)**(-two/three)
-          tanFac1 = (detF0/detF)**(-one/three)
-          tanFac2 = (detF0/detF)**(-two/three)
+        ! calculate solvent chemical potential and its gradient
+        mu    = dot_product( Nxi, reshape(muNode, [mDOFEL] ) )
+        dMudX = matmul( BmatScalar, muNode )
 
-        else if ( (jtype .eq. 4) .and. (nInt .eq. 4) )  then
-          ! fully-integrated plane strain bilinear quad element
-          Fbar(3,3)           = one
-          Fbar(1:nDim,1:nDim) = (detF0/detF)**(half) * F(1:nDim,1:nDim)
-          resFac              = (detF0/detF)**(-half)
-          tanFac1             = one
-          tanFac2             = (detF0/detF)**(-half)
+        ! calculate ions' electrochemical potentials and their gradients
+        do k = 1, nIons
+          Omg(k)  = dot_product(Nxi, reshape(OmgNode(k,:,1), [iDOFEL]))
+          dOmgdX(k,:,:) = matmul( BmatScalar,
+     &                            reshape(OmgNode(k,:,1), [iDOFEL,1]) )
+        end do
 
+        !! definition of modified deformation gradient, F-bar
+        if (fbarFlag .eq. .true.) then
+          if ( (jtype .eq. 2) .and. (nInt .eq. 8) ) then
+            ! fully-integrated HEX8 element
+            Fbar    = (detF0/detF)**(third) * F
+            resFac  = (detF0/detF)**(-two/three)
+            tanFac1 = (detF0/detF)**(-one/three)
+            tanFac2 = (detF0/detF)**(-two/three)
+
+          else if ( (jtype .eq. 4) .and. (nInt .eq. 4) )  then
+            ! fully-integrated QUAD4-PE element
+            Fbar(3,3)           = one
+            Fbar(1:nDim,1:nDim) = (detF0/detF)**(half)*F(1:nDim,1:nDim)
+            resFac              = (detF0/detF)**(-half)
+            tanFac1             = one
+            tanFac2             = (detF0/detF)**(-half)
+          else
+            ! standard F for all other available elements
+            Fbar    = F
+            resFac  = one
+            tanFac1 = one
+            tanFac2 = one
+            call msg%ferror( flag=warn, src='uel_pe_hydrogel',
+     &          msg='F-bar is not available: ', ivec=[jtype, nInt])
+          call xit
+          end if
         else
-          ! standard F for all other types of implemented elements
+          ! set F-bar = F if fbarFlag is .false. for all element
           Fbar    = F
           resFac  = one
           tanFac1 = one
+          tanFac2 = one
         end if
 
 
         ! call material point subroutine for the polyelectrolyte gel
         call umat_pe_hydrogel(kstep,kinc,time,dtime,nDim,analysis,
      &          nStress,nNode,jelem,intpt,coord_ip,props,nprops,
-     &          jprops,njprops,nIons,matID,Fbar,mu,dMudX,omg,dOmgdX,
+     &          jprops,njprops,nIons,matID,Fbar,mu,dMudX,Omg,dOmgdX,
      &          svars,nsvars,fieldVar,dfieldVar,npredf,
-     &          stressPK2,Jw,dCwdt,Jion,dCiondt,
+     &          stressPK2,dCwdt,Jw,dCiondt,Jion,
      &          Dmat,Cmat,
-     &          aVectUM,dCwdotdF,DmatMU,dCwdotdMu,dJwdMu,MmatW,MmatWI,
+     &          aVectUM,dCwdotdF,DmatMU,dCwdotdMu,dJwdMu,MmatW,
      &          aVectUI,dCidotdF,DmatIU,dCidotdMu,dJidOmg,MmatII,
-     &          dCwdotdOmg,dCidotdOmg,dJwdOmg,dJidMu)
+     &          MmatWI,MmatIW,dCwdotdOmg,dCidotdOmg,dJwdOmg,dJidMu)
 
         !!!!!!!!!!!!!!! END CONSTITUTIVE CALCULATION !!!!!!!!!!!!!!!!!!
 
@@ -627,7 +618,7 @@
 
         !!!!!!!!!!!!! FORM ADDITIONAL ELEMENT OPERATORS !!!!!!!!!!!!!!!
 
-        ! form the [SIGMA_S] matrix for geometric stiffness
+        ! form [SIGMA_S] matrix for geometric stiffness
         call voigtVectorScatter(stressPK2, stressTensorPK2)
 
         do i = 1, nDim
@@ -647,7 +638,8 @@
           end do
         end do
 
-        BNLmat = matmul(Bmat,SIGMA_F)
+        BNLmat  = matmul(Bmat,SIGMA_F)
+        BNLmatT = transpose(BNLmat)
 
         !!!!!!!!!! END FORMING ADDITIONAL ELEMENT OPERATORS !!!!!!!!!!!
 
@@ -655,27 +647,29 @@
 
         !!!!!!!!!!!!!!!! RESIDUAL VECTOR CALCULATION !!!!!!!!!!!!!!!!!!
 
-        ! contribution of tractions and fluxes are ignored here
-        ! mechanucal residual
+        ! mechanucal residual: body force and traction are ignored here
         Ru  = Ru - wInt(intPt) * detJ * resFac *
-     &           matmul( transpose(BNLmat), stressPK2 )
+     &             matmul( BNLmatT, stressPK2 )
 
 
-        ! solvent residual
+        ! solvent residual: solvent fluxes are ignored here
         Rm  = Rm + wInt(intPt) * detJ *
-     &      ( - reshape(Nxi, [nNode,1]) * dCwdt + matmul(dNdX,Jw) )
+     &          (
+     &            - NmatScalarT * dCwdt
+     &            + matmul( BmatScalarT, Jw )
+     &          )
 
 
-        ! solute ion residuals
+        ! solute ion residuals: ion fluxes are ignored here
         do k = 1, nIons
           Ri(k,:,:) = Ri(k,:,:) + wInt(intPt) * detJ *
      &      (
-     &      - reshape(Nxi, [nNode, 1]) * dCiondt(k)
-     &      + matmul( dNdX, reshape( Jion(k,:,:), [nDim, 1] ) )
+     &        - NmatScalarT * dCiondt(k)
+     &        + matmul( BmatScalarT, reshape( Jion(k,:,:), [nDim, 1] ) )
      &      )
         end do
 
-        !!!!!!!!!!!!!!!! RESIDUAL VECTOR CALCULATION !!!!!!!!!!!!!!!!!!
+        !!!!!!!!!!!!!! END RESIDUAL VECTOR CALCULATION !!!!!!!!!!!!!!!!
 
 
 
@@ -684,121 +678,21 @@
         ! mechanical tangent matrix
         Kuu = Kuu + wInt(intPt) * detJ * tanFac1 *
      &      (
-     &      matmul( matmul( transpose(Gmat), SIGMA_S ), Gmat )
-     &      + matmul( transpose(BNLmat), matmul(Dmat,BNLmat) )
+     &        matmul( matmul( GmatT, SIGMA_S ), Gmat )
+     &        + matmul( BNLmatT, matmul(Dmat,BNLmat) )
      &      )
-
-        ! F-bar modification for fully-integrated trilinear hex element
-        if ( (jtype .eq. 2) .and. (nInt .eq. 8) ) then
-          ! form fourth-order QR0 and QR tensor
-          QR0Tensor = zero
-          QRTensor  = zero
-
-          do i = 1,nDim
-            do j = 1,nDim
-              do k = 1,nDim
-                do l = 1,nDim
-                  do m = 1,nDim
-                    do n = 1,nDim
-                      do p = 1,nDim
-                        do q = 1,nDim
-                          QR0Tensor(i,j,k,l) = QR0Tensor(i,j,k,l)
-     &                        + third * F0InvT(k,l) *
-     &                          (
-     &                            Fbar(i,p) * Cmat(p,j,m,n)
-     &                            * Fbar(q,m) * Fbar(q,n)
-     &                            - Fbar(i,q) * stressTensorPK2(q,j)
-     &                          )
-
-                          QRTensor(i,j,k,l) = QRTensor(i,j,k,l)
-     &                        + third * FInvT(k,l) *
-     &                          (
-     &                            Fbar(i,p) * Cmat(p,j,m,n)
-     &                            * Fbar(q,m) * Fbar(q,n)
-     &                            - Fbar(i,q) * stressTensorPK2(q,j)
-     &                          )
-                        end do
-                      end do
-                    end do
-                  end do
-                end do
-              end do
-            end do
-          end do
-
-          ! reshape QR and QR0 tensor into matrix form
-          call unsymmMatrix(QR0Tensor,QR0mat)
-          call unsymmMatrix(QRTensor,QRmat)
-
-          ! modify the element tangent matrix
-          Kuu   = Kuu + wInt(intPt) * detJ * tanFac2  *
-     &              (
-     &              matmul(transpose(Gmat), matmul(QR0mat,Gmat0))
-     &              - matmul(transpose(Gmat), matmul(QRmat,Gmat))
-     &              )
-        end if
-        ! end F-bar modification of the mechanical tangent for HEX8 element
-
-
-        ! F-bar modification for fully-integrated plane strain bilinear quad element
-        if ( (jtype .eq. 4) .and. (nInt .eq. 4) ) then
-          ! form fourth-order QR0 and QR tensor
-          QR0Tensor = zero
-          QRTensor  = zero
-
-          do i = 1,nDim
-            do j = 1,nDim
-              do k = 1,nDim
-                do l = 1,nDim
-                  do m = 1,nDim
-                    do n = 1,nDim
-                      do p = 1,nDim
-                        do q = 1,nDim
-                          QR0Tensor(i,j,k,l) = QR0Tensor(i,j,k,l)
-     &                        + half * Fbar(i,p) * Cmat(p,j,m,n)
-     &                        * Fbar(q,m) * Fbar(q,n) * F0InvT(k,l)
-
-                          QRTensor(i,j,k,l) = QRTensor(i,j,k,l)
-     &                        + half * Fbar(i,p) * Cmat(p,j,m,n)
-     &                        * Fbar(q,m) * Fbar(q,n) * FInvT(k,l)
-                        end do
-                      end do
-                    end do
-                  end do
-                end do
-              end do
-            end do
-          end do
-
-          ! reshape QR and QR0 tensor into matrix form
-          call unsymmMatrix(QR0Tensor,QR0mat)
-          call unsymmMatrix(QRTensor,QRmat)
-
-          ! modify the element tangent matrix
-          Kuu = Kuu + wInt(intPt) * detJ * tanFac2  *
-     &              (
-     &              matmul(transpose(Gmat), matmul(QR0mat,Gmat0))
-     &              - matmul(transpose(Gmat), matmul(QRmat,Gmat))
-     &              )
-
-        end if
-        ! end F-bar modification of the mechanical tangent for QUAD4 element
 
 
         ! mechanical-solvent tangent matrix
         Kum = Kum + wInt(intpt) * detJ * tanFac2 *
-     &        matmul( matmul( transpose(Gmat), aVectUM ),
-     &                reshape(Nxi, [1, nNode]) )
+     &        matmul( matmul( GmatT, aVectUM ), NmatScalar )
 
 
         ! mechanical-solute ion tangent matrix
         do k = 1, nIons
           Kui(k,:,:)  = Kui(k,:,:) + wInt(intpt) * detJ * tanFac2 *
-     &        matmul( matmul( transpose(Gmat), aVectUI(k,:,:) ),
-     &                reshape(Nxi, [1, nNode]) )
+     &        matmul( matmul( GmatT, aVectUI(k,:,:) ), NmatScalar )
         end do
-
-
 
 
 
@@ -806,30 +700,26 @@
         ! solvent-mechanical tangent matrix
         Kmu = Kmu + wInt(intPt) * detJ *
      &        (
-     &        matmul( matmul( reshape(Nxi, [nNode, 1]),
-     &                        dCwdotdF ), Gmat)
-     &        - matmul( matmul(dNdX, DmatMU), Gmat )
+     &        matmul( matmul( NmatScalarT, dCwdotdF ), Gmat)
+     &        - matmul( matmul( BmatScalarT, DmatMU ), Gmat )
      &        )
 
         ! solvent tangent matrix
         Kmm = Kmm + wInt(intPt) * detJ *
      &        (
-     &        matmul( reshape(Nxi, [nNode, 1]),
-     &                reshape(Nxi, [1, nNode]) ) * dCwdotdMu
-     &        - matmul( matmul(dNdX, dJwdMu),
-     &                  reshape( Nxi, [1, nNode] ) )
-     &        + matmul( matmul(dNdX, MmatW), transpose(dNdX) )
+     &        matmul( NmatScalarT, NmatScalar ) * dCwdotdMu
+     &        - matmul( matmul(BmatScalarT, dJwdMu), NmatScalar )
+     &        + matmul( matmul(BmatScalarT, MmatW), BmatScalar )
      &        )
 
         ! solvent-solute ion tangent matrix
         do k = 1, nIons
           Kmi(k,:,:)  = Kmi(k,:,:) + wInt(intPt) * detJ *
      &          (
-     &          matmul( reshape(Nxi, [nNode, 1]),
-     &                  reshape(Nxi, [1, nNode]) ) * dCwdotdOmg(k)
-     &          - matmul( matmul( dNdX, dJwdOmg(k,:,:) ),
-     &                    reshape(Nxi, [1, nNode]) )
-     &          + matmul(matmul(dNdX, MmatWI(k,:,:)), transpose(dNdX))
+     &          matmul( NmatScalarT, NmatScalar ) * dCwdotdOmg(k)
+     &          - matmul( matmul( BmatScalarT, dJwdOmg(k,:,:) ),
+     &                    NmatScalar )
+     &          + matmul(matmul(BmatScalarT, MmatWI(k,:,:)), BmatScalar)
      &          )
         end do
 
@@ -841,134 +731,130 @@
         do k = 1, nIons
           Kiu(k,:,:) = Kiu(k,:,:) + wInt(intPt) * detJ *
      &        (
-     &        matmul( matmul( reshape(Nxi, [1, nNode]),
-     &                dCidotdF(k,:,:) ), Gmat )
-     &        - matmul( matmul( dNdX, DmatIU(k,:,:) ), Gmat )
+     &        matmul( matmul( NmatScalarT, dCidotdF(k,:,:) ), Gmat )
+     &        - matmul( matmul( BmatScalarT, DmatIU(k,:,:) ), Gmat )
      &        )
         end do
+
 
         ! solute ion-solvent tangent matrix
         do k = 1, nIons
           Kim(k,:,:)  = Kim(k,:,:) + wInt(intPt) * detJ *
-     &           (
-     &          matmul( reshape(Nxi, [nNode, 1]),
-     &                  reshape(Nxi, [1, nNode]) ) * dCidotdMu(k)
-     &          - matmul( matmul(dNdX, dJwdMu),
-     &                    reshape(Nxi, [1, nNode]) )
+     &          (
+     &          matmul( NmatScalarT, NmatScalar ) * dCidotdMu(k)
+     &          - matmul( matmul( BmatScalarT, dJwdOmg(k,:,:) ),
+     &                    NmatScalar )
      &          )
         end do
+
 
         ! solute ions tangent matrices (ion-ion interaction)
         do k = 1, nIons
           do l = 1, nIons
             Kii(k,l,:,:)  = Kii(k,l,:,:) + wInt(intPt) * detJ *
      &          (
-     &          matmul( reshape( Nxi, [nNode, 1] ),
-     &                  reshape( Nxi, [1, nNode] ) ) * dCidotdOmg(k,l)
-     &          - matmul( matmul(dNdX, dJidOmg(k,l,:,:)),
-     &                    reshape( Nxi, [1, nNode] ) )
-     &          + matmul(matmul(dNdX, MmatII(k,l,:,:)), transpose(dNdX))
+     &          matmul( NmatScalarT, NmatScalar) * dCidotdOmg(k,l)
+     &          - matmul( matmul( BmatScalarT, dJidOmg(k,l,:,:) ),
+     &                            NmatScalar )
+     &          + matmul( matmul( BmatScalarT, MmatII(k,l,:,:) ),
+     &                            BmatScalar )
      &          )
           end do
         end do
 
+
+
+        !! F-bar modification block
+        if (fbarFlag .eq. .true.) then
+
+          ! form fourth-order QR0 and QR tensor
+          QR0Tensor = zero
+          QRTensor  = zero
+
+          !! fully-integrated HEX8 element
+          if ( (jtype .eq. 2) .and. (nInt .eq. 8) ) then
+
+            do i = 1,nDim
+              do j = 1,nDim
+                do k = 1,nDim
+                  do l = 1,nDim
+                    do m = 1,nDim
+                      do n = 1,nDim
+                        do p = 1,nDim
+                          do q = 1,nDim
+                            QR0Tensor(i,j,k,l) = QR0Tensor(i,j,k,l)
+     &                          + third * F0InvT(k,l) *
+     &                            (
+     &                              Fbar(i,p) * Cmat(p,j,m,n)
+     &                              * Fbar(q,m) * Fbar(q,n)
+     &                              - Fbar(i,q) * stressTensorPK2(q,j)
+     &                            )
+
+                            QRTensor(i,j,k,l) = QRTensor(i,j,k,l)
+     &                          + third * FInvT(k,l) *
+     &                            (
+     &                              Fbar(i,p) * Cmat(p,j,m,n)
+     &                              * Fbar(q,m) * Fbar(q,n)
+     &                              - Fbar(i,q) * stressTensorPK2(q,j)
+     &                            )
+                          end do
+                        end do
+                      end do
+                    end do
+                  end do
+                end do
+              end do
+            end do
+
+          else if ( (jtype .eq. 4) .and. (nInt .eq. 4) ) then
+
+            do i = 1,nDim
+              do j = 1,nDim
+                do k = 1,nDim
+                  do l = 1,nDim
+                    do m = 1,nDim
+                      do n = 1,nDim
+                        do p = 1,nDim
+                          do q = 1,nDim
+                            QR0Tensor(i,j,k,l) = QR0Tensor(i,j,k,l)
+     &                          + half * Fbar(i,p) * Cmat(p,j,m,n)
+     &                          * Fbar(q,m) * Fbar(q,n) * F0InvT(k,l)
+
+                            QRTensor(i,j,k,l) = QRTensor(i,j,k,l)
+     &                          + half * Fbar(i,p) * Cmat(p,j,m,n)
+     &                          * Fbar(q,m) * Fbar(q,n) * FInvT(k,l)
+                          end do
+                        end do
+                      end do
+                    end do
+                  end do
+                end do
+              end do
+            end do
+
+          end if
+
+          ! reshape QR and QR0 tensor into matrix form
+          call unsymmMatrix(QR0Tensor,QR0mat)
+          call unsymmMatrix(QRTensor,QRmat)
+
+          ! modify the element tangent matrix
+          Kuu = Kuu + wInt(intPt) * detJ * tanFac2  *
+     &              (
+     &                matmul( GmatT, matmul(QR0mat,Gmat0) )
+     &                - matmul( GmatT, matmul(QRmat,Gmat) )
+     &              )
+
+        end if
+
         !!!!!!!!!!!!!! END TANGENT MATRIX CALCULATION !!!!!!!!!!!!!!!!!
 
       end do
-
       !!!!!!!!!!!!!!!! END OF INTEGRATION POINT LOOP !!!!!!!!!!!!!!!!!!
 
 
 
-      !!!!!!!!!!!!!!!!!!!! FLUX BOUNDARY CONDITION !!!!!!!!!!!!!!!!!!!!
-
-      ! THIS PART OF THE CODE HAS NOT BEEN COMPLETELY TESTED YET
-      ! the code development follows Chester et al. (IJSS, 2015) and
-      ! and Narayan et al. (JMPS, 2022) to apply Robin boundary conditions
-      ! in HEX8 and QUAD4 elements (for ions and solvent)
-      ! apply traction/ pressure using the overlaying mechanical elements
-
-      if (ndload .gt. 0) then
-
-        K_rate = 10.0_wp
-
-        ! loop over all the applied surface fluxes
-        do i = 1, ndload
-
-          ion     = jdltyp(i,1)/10
-          face    = mod(jdltyp(i,1),10)
-          fluxApp = adlmag(i,1)
-
-          if (jtype .eq. 2) then          ! check flux faces for HEX8 element
-
-            if( (face .lt. 1) .and. (face .gt. 6) ) then
-              call msg%ferror( flag=error, src='uel_pe_hydrogel',
-     &             msg='Flux applied to unknown face: ', ia=face )
-              call xit
-            endif
-
-          elseif (jtype  .eq.  4) then    ! check flux faces for QUAD4 element
-            if( (face .lt. 1) .and. (face .gt. 4) ) then
-              call msg%ferror( flag=error, src='uel_pe_hydrogel',
-     &             msg='Flux applied to unknown face: ', ia=face )
-              call xit
-            endif
-
-          else                            ! flux BC not available for other element types
-            call msg%ferror( flag=error, src='uel_pe_hydrogel',
-     &               msg='Flux BC not available for element.', ia=jtype )
-            call xit
-          end if
-
-
-          ! get the surface integration points and weights
-          call getSurfGaussQuadrtr(face,wIntS,xiSurf)
-
-            ! loop over the surface integration points
-            do intPt = 1, nIntS
-
-              ! compute the surface area for 3D element
-              call computeSurfArea(xiSurf(intPt,:),face,coords,NxiS,dA)
-
-              ! add contribution to the residuals and tangent matrix
-              if (ion .eq. 0) then                      ! for solvent
-                mu_surf = dot_product(NxiS, reshape(muNode, [mDOFEL]))
-                fluxNet = - K_rate * (fluxApp - mu_surf)
-
-                Rm  = Rm
-     &              - wIntS(intPt)*dA*reshape(NxiS,[nNode,1])*fluxNet
-
-                Kmm = Kmm + wIntS(intPt) * dA * K_rate *
-     &                matmul( reshape(NxiS, [nNode, 1]),
-     &                      reshape(NxiS, [1, nNode]) )
-
-              else                                      ! for ions
-                omg_surf(ion)  =
-     &            dot_product(NxiS, reshape(omgNode(ion,:,1), [iDOFEL]))
-                fluxNet   = - K_rate * (fluxApp - omg_surf(ion))
-
-                Ri(ion,:,:) = Ri(ion,:,:)
-     &              - wIntS(intPt)*dA*reshape(NxiS,[nNode,1])*fluxNet
-
-                Kii(ion,ion,:,:) =  Kii(ion,ion,:,:)
-     &                      + wIntS(intPt) * dA * K_rate *
-     &                      matmul( reshape(NxiS, [nNode, 1]),
-     &                      reshape(NxiS, [1, nNode]) )
-              end if
-
-            end do
-            ! end surface integration point loop
-
-        end do
-        ! end the loop over the flux forces (ndload)
-
-      end if
-
-      !!!!!!!!!!!!!!!!!! END FLUX BOUNDARY CONDITION !!!!!!!!!!!!!!!!!!
-
-
-
-      !!!!!!!!! ASSEMBLE THE ELEMENT TANGENTS AND RESIDUALS !!!!!!!!!!!
+      !!!!!!! ASSEMBLE THE ELEMENT TANGENT MATRIX AND RESIDUAL !!!!!!!!
 
       call assembleElement(nNode,nIons,uDOFEL,mDOFEL,iDOFEL,nDOFEL,
      &          Kuu,Kum,Kui,Kmu,Kmm,Kmi,Kiu,Kim,Kii,Ru,Rm,Ri,
@@ -980,6 +866,7 @@
       amatrx(1:NDOFEL,1:NDOFEL) = Kelem(1:NDOFEL,1:NDOFEL)
       rhs(1:NDOFEL,1)           = Relem(1:NDOFEL,1)
 
+      !!!!!!!!!!!!!!!!!!!!!!!!! END SUBROUTINE !!!!!!!!!!!!!!!!!!!!!!!!!
 
 
       end subroutine uel_pe_hydrogel
@@ -989,13 +876,13 @@
 
       subroutine umat_pe_hydrogel(kstep,kinc,time,dtime,nDim,analysis,
      &          nStress,nNode,jelem,intpt,coord_ip,props,nprops,
-     &          jprops,njprops,nIons,matID,F,mu,dMudX,omg,dOmgdX,
+     &          jprops,njprops,nIons,matID,F,mu,dMudX,Omg,dOmgdX,
      &          svars,nsvars,fieldVar,dfieldVar,npredf,
-     &          stressPK2,Jw,dCwdt,Jion,dCiondt,
+     &          stressPK2,dCwdt,Jw,dCiondt,Jion,
      &          Dmat,Cmat,
-     &          aVectUM,dCwdotdF,DmatMU,dCwdotdMu,dJwdMu,MmatW,MmatWI,
+     &          aVectUM,dCwdotdF,DmatMU,dCwdotdMu,dJwdMu,MmatW,
      &          aVectUI,dCidotdF,DmatIU,dCidotdMu,dJidOmg,MmatII,
-     &          dCwdotdOmg,dCidotdOmg,dJwdOmg,dJidMu)
+     &          MmatWI,MmatIW,dCwdotdOmg,dCidotdOmg,dJwdOmg,dJidMu)
 
       use global_parameters
       use error_logging
@@ -1020,7 +907,7 @@
       integer,  intent(in)  :: jprops(njprops)
 
       real(wp), intent(in)  :: F(3,3), mu, dMudX(nDim,1)
-      real(wp), intent(in)  :: omg(nIons), dOmgdX(nIons,nDim,1)
+      real(wp), intent(in)  :: Omg(nIons), dOmgdX(nIons,nDim,1)
       real(wp), intent(in)  :: fieldVar(npredf)
       real(wp), intent(in)  :: dfieldVar(npredf)
 
@@ -1035,6 +922,7 @@
       real(wp), intent(out) :: DmatIU(nIons,nDim,nDim*nDim)
       real(wp), intent(out) :: MmatW(nDim,nDim)
       real(wp), intent(out) :: MmatWI(nIons,nDim,nDim)
+      real(wp), intent(out) :: MmatIW(nIons,nDim,nDim)
       real(wp), intent(out) :: MmatII(nIons,nIons,nDim,nDim)
       real(wp), intent(out) :: dJwdMu(nDim,1), dJwdOmg(nIons,nDim,1)
       real(wp), intent(out) :: dJidMu(nIons,nDim,1)
@@ -1045,9 +933,9 @@
       real(wp), intent(out) :: dCidotdMu(nIons)
       real(wp), intent(out) :: dCidotdOmg(nIons,nIons)
 
+
       ! state variables that may be updated
       real(wp), intent(inout), optional   :: svars(nsvars)
-
 
       ! local variables (kinematic quantities)
       real(wp)          :: detF, Finv(3,3), FInvT(3,3)
@@ -1057,8 +945,10 @@
       real(wp)          :: strainTensorLagrange(3,3)
 
       ! local variables (internal variables)
+      logical           :: intVarsFlag
       real(wp)          :: phi_old, Cw_old, Cion_old(nIons), psi_old
       real(wp)          :: phi_new, Cw_new, Cion_new(nIons), psi_new
+      real(wp)          :: CionTotal, chargeTotal
       real(wp)          :: vars(nProps+3+nIons)
       real(wp)          :: rootsOld(nIons+2), roots(nIons+2)
       real(wp)          :: detFe, detFs
@@ -1071,25 +961,43 @@
 
 
       ! local tangent tensors and related quantities
-      real(wp)          :: dCwdPhi, dMudPhi, dPhidMu
-      real(wp)          :: dCwdMu, dMudCw
-      real(wp)          :: dCwdOmg(nIons)
-      real(wp)          :: dCiondMu(nIons), dCiondOmg(nIons,nIons)
-      real(wp)          :: dMudFTensor(3,3)
-      real(wp)          :: dOmgdFTensor(nIons,3,3)
-      real(wp)          :: dCwdFTensor(3,3)
-      real(wp)          :: dCwdCTensor(3,3)
-      real(wp)          :: dCiondFTensor(nIons,3,3)
+      real(wp)          :: dPhidCw, dCwdPhi
+      real(wp)          :: fjac(nIons+2,nIons+2)
+      real(wp)          :: term1, term2, press
+      real(wp)          :: dGdFTensor(nIons+2,3,3)
+      real(wp)          :: dGdCTensor(nIons+2,3,3)
+      real(wp)          :: dGdF_kL(nIons+2,1)
+      real(wp)          :: dGdC_kL(nIons+2,1)
+      real(wp)          :: dLocaldF_kL(nIons+2,1)
+      real(wp)          :: dLocaldC_kL(nIons+2,1)
+      real(wp)          :: dCwdFTensor(3,3), dCiondFTensor(nIons,3,3)
+      real(wp)          :: dPsidFTensor(3,3)
+      real(wp)          :: dCwdCTensor(3,3), dCiondCTensor(nIons,3,3)
+      real(wp)          :: dPsidCTensor(3,3)
+
+      real(wp)          :: dGdMu(nIons+2,1)
+      real(wp)          :: dLocaldMu(nIons+2,1)
+      real(wp)          :: dCwdMu, dMudCw, dCiondMu(nIons)
+      real(wp)          :: dPsidMu
+
+      real(wp)          :: dG1dOmg(nIons), dGiondOmg(nIons,nIons)
+      real(wp)          :: dGdOmg(nIons,nIons+2)
+      real(wp)          :: dGdOmg_k(nIons+2,1)
+      real(wp)          :: dLocaldOmg_k(nIons+2,1)
+      real(wp)          :: dLocaldOmg(nIons,nIons+2)
+      real(wp)          :: dCwdOmg(nIons), dCiondOmg(nIons,nIons)
+      real(wp)          :: dPsidOmg(nIons)
+
+
       real(wp)          :: dSdCwTensor(3,3)
+      real(wp)          :: dSdMuTensor(3,3)
       real(wp)          :: FSTensorUM(3,3)
+      real(wp)          :: dSdOmgTensor(nIons,3,3)
       real(wp)          :: FSTensorUI(nIons,3,3)
-      real(wp)          :: JwTensor(nDim,nDim,nDim)
-      real(wp)          :: JiTensor(nIons,nDim,nDim,nDim)
+      real(wp)          :: dJwdFTensor(nDim,nDim,nDim)
+      real(wp)          :: dJiondFTensor(nIons,nDim,nDim,nDim)
       real(wp)          :: dCwdotdFTensor(3,3)
       real(wp)          :: dCidotdFTensor(nIons,3,3)
-      real(wp)          :: dCdFvect(nIons+1,1)
-      real(wp)          :: dGdCmat(nIons+1,nIons+1)
-      real(wp)          :: dGdFvect(nIons+1,1)
 
 
       ! intermeidate variables for post-processing and output
@@ -1113,9 +1021,8 @@
       real(wp)          :: phi0, rho, Gshear, Kappa, lam_L
       real(wp)          :: Cp_fix, Vp, Zp
       real(wp)          :: mu0, Vw, chi, Dw
-      real(wp)          :: Cion0(nIons), omg0(nIons), Vion(nIons)
+      real(wp)          :: Cion0(nIons), Omg0(nIons), Vion(nIons)
       real(wp)          :: Zion(nIons), Dion(nIons)
-
 
 
       integer           :: i, j, k, l, m, n
@@ -1123,17 +1030,15 @@
       type(logger)      :: msg
 
 
-
       ! initialize matrial stiffness tensors
-      Cmat        = zero
-      Dmat        = zero
-      JwTensor    = zero
-      JiTensor    = zero
+      Cmat            = zero
+      dJwdFTensor     = zero
+      dJiondFTensor   = zero
 
       !!!!!!!!!!!!!!!!!!!!!!!! BEGIN PROPERTIES !!!!!!!!!!!!!!!!!!!!!!!!
 
       ! assign material properties to local named variables
-      nIonProps = jprops(3)
+      nIonProps = jprops(4)
 
       Rgas      = props(1)
       Fcon      = props(2)
@@ -1153,7 +1058,7 @@
 
       do k = 1, nIons
         Cion0(k)  = props( 16 + nIonProps*(k-1) )
-        omg0(k)   = props( 17 + nIonProps*(k-1) )
+        Omg0(k)   = props( 17 + nIonProps*(k-1) )
         Vion(k)   = props( 18 + nIonProps*(k-1) )
         Zion(k)   = props( 19 + nIonProps*(k-1) )
         Dion(k)   = props( 20 + nIonProps*(k-1) )
@@ -1201,8 +1106,21 @@
         Cion_old  = Cion0               ! read the initial referential conc. of ion
         psi_old   = zero                ! read initial electric potential
 
+        Cw_old    = (one/phi0 - one)/Vw
+
+        chargeTotal   = dot_product(Cion0,Zion) + Cp_fix*Zp
+
+        if (chargeTotal .gt. 1.0e-3_wp) then
+          call msg%ferror( flag=error, src='umat_pe_hydrogel',
+     &        msg='Initial charges violate electroneutrality.',
+     &        ra= chargeTotal, ivec=[jelem, intpt] )
+          call xit
+        end if
+
       else
         phi_old       = svars( (intPt-1)*(nIons+2) + 1 )
+
+        Cw_old        = phi0*(one/phi_old - one)/Vw
 
         do k = 1, nIons
           Cion_old(k) = svars( (intPt-1)*(nIons+2) + k+1 )
@@ -1210,8 +1128,6 @@
 
         psi_old       = svars( (intPt-1)*(nIons+2) + nIons+2 )
       end if
-
-      Cw_old          = phi0*(one/phi_old - one)/Vw
 
 
       ! initial conditions for the solver (previous state)
@@ -1229,9 +1145,32 @@
 
 
       ! call the nonlinear solver to solve for internal variables
-      ! print *, kstep, kinc, time(1), jelem, intpt
       call fsolve(electroChemicalState, rootsOld, roots,
-     &              .true., vars=vars)
+     &              .true., vars=vars, sflag=intVarsFlag)
+
+      if (intVarsFlag .eq. .false.) then 
+        call msg%ferror(flag=error, src='umat_pe_hydrogel',
+     &        msg='No solution for the internal variables: ',
+     &        ivec=[jelem, intpt])
+        
+        write(stdErr,'(A)') 'Properties and state variables: '
+        do k = 1, size(vars)
+          write(stdErr,*) vars(k)
+        end do
+
+        write(stdErr,'(A)') 'Old roots: '
+        do k = 1, nIons+2
+          write(stdErr,*) rootsOld(k)
+        end do
+
+        write(stdErr,'(A)') 'Stalled roots: '
+        do k = 1, nIons+2
+          write(stdErr,*) roots(k)
+        end do
+
+        call xit
+
+      end if
 
 
       ! retrieve all the solutions for further usage
@@ -1244,6 +1183,11 @@
       detFs             = one/phi_new
       detFe             = detF/(phi0*detFs)
 
+      ! total ion concentration
+      CionTotal     = zero
+      do k = 1, nIons
+        CionTotal   = CionTotal + Cion_new(k)
+      end do
 
       ! internal variables are: phi_new, Cion_new(nIons), psi_new
       ! there are (nIons+2) state variables per integration point
@@ -1258,14 +1202,16 @@
       !!!!!!!!!!!! END SOLVE AND UPDATE INERNAL VARIABLES !!!!!!!!!!!!!!
 
 
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-      !! element residual related material quantities
+
+
+      !!!!!!!!!!!!!!!!!! ELEMENT RESIDUAL QUANTITITES !!!!!!!!!!!!!!!!!!
+
       ! (1) stress tensors
-      stressTensorPK2 = Gshear * ( ID3 - (phi0)**(two/three) * CInv )
-     &                  + Kappa * phi0 * detFs * log(detFe) * CInv
+      stressTensorPK2     = Gshear * (ID3 - (phi0)**(two/three) * CInv)
+     &                      + Kappa * phi0 * detFs * log(detFe) * CInv
 
-      stressTensorCauchy = (one/detF)
+      stressTensorCauchy  = (one/detF)
      &                    * ( Gshear * (B - (phi0)**(two/three) * ID3)
      &                    + Kappa * phi0 * detFs * log(detFe) * ID3 )
 
@@ -1285,187 +1231,318 @@
       Jw        = - matmul(MmatW,dMudX)
 
 
-      ! (3.3) calculate solute mobility matrix: Mion = Di*Ci/RT*inv(C)
+      ! (3.3) calculate solvent-ion mobility matrix
+      MmatWI    = zero              ! no cross-diffusion in this model
+      MmatIW    = zero
+
+
+      ! (3.4) calculate solute mobility matrix: Mion = Di*Ci/RT*inv(C)
       MmatII    = zero
 
       do k = 1, nIons
         MmatII(k,k,:,:) = (Dion(k)*Cion_new(k)/RT)*Cinv(1:nDim,1:nDim)
       end do
 
-      ! (3.4) calculate the solute molar flux: Ji = - Mion*Grad(Omg)
+      ! (3.5) calculate the solute molar flux: Ji = - Mion*Grad(Omg)
       Jion            = zero
       do k = 1, nIons
         Jion(k,:,:)   = - matmul( MmatII(k,k,:,:), dOmgdX(k,:,:) )
       end do
 
-      ! (3.5) calculate solvent-ion mobility matrix
-      MmatWI    = zero              ! no cross-diffusion in this model
+      !!!!!!!!!!!!!!!! END ELEMENT RESIDUAL QUANTITITES !!!!!!!!!!!!!!!!
 
 
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-      !! element tangent related material quantities
-      ! (4.1) calculate dCw/dPhi
-      dCwdPhi   = - (phi0/ (Vw*(phi_new)**two) )
+      !!!!!!!!!!!!!!!!!!! ELEMENT TANGENT QUANTITITES !!!!!!!!!!!!!!!!!!
 
-      ! (4.2) Calculate dMudPhi
-      dMudPhi   = RT * (one - one/(one-phi_new) + two*chi*phi_new)
+      ! first we compute all the derivatives of the internal variables
+      ! (Cw, Cion) w.r.t the degrees of freedom (F, C, mu, omega, etc.)
+      ! these quantities will be used in calculating the material tangents
+
+       ! (4) calculate dCw/dPhi and dPhi/dCw
+      dPhidCw   = - (phi_new**two/phi0) * Vw
+      dCwdPhi   = one/dPhidCw
+
+
+
+      ! (5) form the jacobian matrix of the local residuals
+      fjac  = zero          ! initialize
+
+      ! calculate the repetitive large terms
+      term1 = ( Gshear/(three*phi0) ) *
+     &        ( trC - three*(phi0)**(two/three) ) + Kappa/phi_new
+
+      press   = (Gshear*phi_new)/(three*phi0)
+     &            * ( three * phi0**(two/three) - trC )
+     &            - Kappa * ( log(detF*phi_new/phi0) )
+
+
+      !! first row
+      ! first element (1,1): dG1/dCw
+      fjac(1,1)   = - (phi_new**two/phi0) * Vw *
+     &            (
+     &              RT * (one - one/(one-phi_new) + two*chi*phi_new)
      &            - Kappa*Vw/phi_new
-     &            + (Kappa*Vw/phi_new)*log(detF*phi_new/phi0)
+     &            + (Kappa*Vw/phi_new) *log(detF*phi_new/phi0)
+     &            )
+     &            + (RT/Cw_new**two) * CionTotal
 
 
+      ! rest of the row (1,2:nIons+1) => (dG_1/dCion_k)
       do k = 1, nIons
-        dMudPhi = dMudPhi + RT*Cion_new(k)/Cw_new**two * dCwdPhi
+        fjac(1,k+1)     = - RT/Cw_new
       end do
 
-      ! (4.3) Calculate dPhidMu
-      dPhidMu   = one/dMudPhi
+      ! last element of the first row (1,nIons+2) => (dG1/dpsi = 0)
+      fjac(1,nIons+2)   = zero
 
-      ! (4.4) Calculate dCw/dMu
-      dCwdMu    = dCwdPhi * dPhidMu
 
-      ! (4.5) Calculate dMu/dCw
-      dMudCw    = one/dCwdMu
-
-      ! (4.6) calculate dCw/dOmega
+      ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
       do k = 1, nIons
-        dCwdOmg(k)  = - Cw_new/RT
+        term2             = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
+     &                      - press*Vion(k) - Omg0(k) ) /RT )
+
+        fjac(k+1,1)       = - RT/Cw_new
+     &                      + (phi_new**two/phi0) * Vw * term1 * Vion(k)
+
+        fjac(k+1,k+1)     = RT/Cion_new(k)
+
+        fjac(k+1,nIons+2) = Fcon*Zion(k)
       end do
 
-      ! (4.7) calculate dCion/dMu
+      !! last row
+      ! first element of last row of the jacobian (nIons+2,1) => dG_n+2/dCw
       do k = 1, nIons
-        dCiondMu(k) = - Cw_new/RT
+        term2   = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
+     &                  - press*Vion(k) - Omg0(k) ) /RT )
+
+        fjac(nIons+2,1) = fjac(nIons+2,1) +
+     &          Zion(k) * term2 *
+     &          (
+     &            one - ( ( phi_new**two * Cw_new *Vw )/( RT*phi0 ) )
+     &                  * term1 * Vion(k)
+     &          )
       end do
 
-      ! (4.8) calculate dCion/dOmg
-      dCiondOmg = zero                              ! initialize
+      ! all the middle columns (nIons+2,2:nIons+1) => dG_n+2/dCion_k = 0
+      fjac(nIons+2,2:nIons+1)     = zero
 
+
+      ! last term of the last row (nIons+2,nIons+2)
       do k = 1, nIons
-        dCiondOmg(k,k) = Cion_new(k)/RT
+        term2   = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
+     &                  - press*Vion(k) - Omg0(k) ) /RT )
+
+        fjac(nIons+2,nIons+2) = fjac(nIons+2,nIons+2)
+     &            - ( Fcon*Cw_new/RT ) * Zion(k)**two * term2
+      end do
+
+
+      !! (6.1) calculate dG/dF
+      dGdFTensor    = zero                  ! initialize
+
+      ! first component: dG1/dF
+      dGdFTensor(1,:,:)     = Kappa * Vw * ( log(detFe) - one ) * FInvT
+
+      ! all the middle components: dG_k/dF
+      do k = 1, nIons
+        dGdFTensor(k+1,:,:) = - ( two*Gshear*phi_new/(three*phi0) * F
+     &                            + kappa * FInvT ) * Vion(k)
+      end do
+
+      ! last component: dG_n+2/dF
+      dGdFTensor(nIons+2,:,:)   = zero
+      do k = 1, nIons
+        dGdFTensor(nIons+2,:,:) = dGdFTensor(nIons+2,:,:)
+     &      + Cw_new/RT
+     &      * ( two*Gshear*phi_new/(three*phi0) * F + kappa * FInvT )
+     &      * Zion(k) * Vion(k)
+     &      * exp(
+     &         (Omg(k) - Fcon*psi_new*Zion(k) - press*Vion(k) - Omg0(k))
+     &         / RT )
       end do
 
 
 
-
-      ! (5.1) calculate dMu/dF
-      dMudFTensor   = Kappa * Vw * ( log(detFe) - one ) * FInvT
-
-      ! (5.2) calculate dOmg/dF
-      dOmgdFTensor  = zero
-      do k = 1, nIons
-        dOmgdFTensor(k,:,:) = - ( two*Gshear*phi_new/(three*phi0)*F
-     &                        + kappa*Vw*FInvT ) * Vion(k)
-      end do
-
-
-      ! (5.3) and (5.4): Calculate dCw/dF and dCion/dF
+      ! (6.2) dCw/dF_kL, dCion_i/dF_kL
       do k = 1,3
         do l = 1,3
 
-          ! right hand side vector
-          dGdFvect(1,1)         = dMudFTensor(k,l)
-          dGdFvect(2:nIons+1,1) = dOmgdFTensor(1:nIons,k,l)
+          ! right hand side vector dG/dF_kl
+          dGdF_kL(1,1)        = dGdFTensor(1,k,l)
 
-          ! first diagonal entry
-          dGdCmat(1,1)          = dMudCw
+          do i = 1, nIons
+            dGdF_kL(i+1,1)    = dGdFTensor(i+1,k,l)
+          end do
 
-          ! first row of the matrix
-          do i = 1, nIons
-            dGdCmat(1,i+1)      = - RT/Cw_new
-     &                  + (phi_new**two/phi0) * Vw * Vion(i) *
-     &                    ( Gshear/(three*phi0)  *
-     &                    ( trC - three*(phi0)**(two/three) )
-     &                  + Kappa/phi_new )
-          end do
-          ! first column of the matrix
-          dGdCmat(2:nIons+1,1)  = - RT/Cw_new
-          ! rest of the diagonal entries
-          do i = 1, nIons
-            dGdCmat(i+1,i+1)    = RT/Cion_new(i)
-          end do
+          dGdF_kL(nIons+2,1)  = dGdFTensor(nIons+2,k,l)
 
           ! solution for each k,L component
-          dCdFvect    = - matmul(Inv(dGdCmat), dGdFvect)
+          dLocaldF_kL    = - matmul( Inv(fjac), dGdF_kL )
 
-          ! put them into appropriate tensors: dCw/dF and dCion/dF
-          dCwdFTensor(k,l)            = dCdFvect(1,1)
-          dCiondFTensor(1:nIons,k,l)  = dCdFvect(2:nIons+1,1)
-
+          ! split it into tensors: dCw/dF_kL, dCion_i/dF_kL, dPsi/dF_kL
+          dCwdFTensor(k,l)            = dLocaldF_kL(1,1)
+          dCiondFTensor(1:nIons,k,l)  = dLocaldF_kL(2:nIons+1,1)
+          dPsidFTensor(k,l)           = dLocaldF_kL(nIons+2,1)
         end do
       end do
 
 
-      ! ! an alternative simplified approximation of (5.3) and (5.4)
-      ! ! (5.3) calculate dCw/dF
-      ! dCwdFTensor   = - dCwdMu * dMudFTensor
+
+      ! (6.3) form dG/dC
+      dGdCTensor            = zero
+      ! first component: dG1/dC
+      dGdCTensor(1,:,:)     = kappa*Vw/two *( log(detFe) - one ) * CInv
+
+      ! middle components: dG_k/dC
+      do k = 1, nIons
+        dGdCTensor(k+1,:,:) = - ( (Gshear*phi_new)/(three*phi0) * ID3
+     &                            + kappa/two*CInv ) * Vion(k)
+      end do
+
+      ! last component: dG_n+2/dC
+      do k = 1, nIons
+        dGdCTensor(nIons+2,:,:) = dGdCTensor(nIons+2,:,:) +
+     &        ( Cw_new/RT*( (Gshear*phi_new)/(three*phi0) * ID3
+     &        + kappa/two*CInv ) )
+     &        * Zion(k) * Vion(k)
+     &        * exp(
+     &         (Omg(k) - Fcon*psi_new*Zion(k) - press*Vion(k) - Omg0(k))
+     &         / RT )
+      end do
 
 
-      ! ! (5.4) calculate dCion/dF
-      ! dCiondFTensor   = zero                    ! initialize
-      ! do k = 1, nIons
-      !   dCiondFTensor(k,:,:) = - dCiondOmg(k,k) * dOmgdFTensor(k,:,:)
-      ! end do
+      ! (6.4) calculate dLocal/dC
+      do k = 1,3
+        do l = 1,3
 
+          ! right hand side vector dG/dF_kl
+          dGdC_kL(1,1)        = dGdCTensor(1,k,l)
 
-      ! (5.5) calculate dCw/dC (symmetric second-order tensor)
-      dCwdCTensor = zero                          ! initialize
-      do i = 1, 3
-        do j = 1, 3
-          do l = 1, 3
-            dCwdCTensor(i,j) = dCwdCTensor(i,j)
-     &                        + half * dCwdFTensor(l,i) * Finv(j,l)
+          do i = 1, nIons
+            dGdC_kL(i+1,1)    = dGdCTensor(i+1,k,l)
           end do
+
+          dGdC_kL(nIons+2,1)  = dGdCTensor(nIons+2,k,l)
+
+          ! solution for each k,L component
+          dLocaldC_kL    = - matmul( Inv(fjac), dGdC_kL )
+
+          ! split it into appropriate tensors: dCw/dF_kL and dCion_i/dF_kL
+          dCwdCTensor(k,l)            = dLocaldC_kL(1,1)
+          dCiondCTensor(1:nIons,k,l)  = dLocaldC_kL(2:nIons+1,1)
+          dPsidCTensor(k,l)           = dLocaldC_kL(nIons+2,1)
+
         end do
       end do
 
 
-      ! (6) dS/dCw (a symmetric second order tensor)
+      ! (6.5) form the RHS dG/dMu vector
+      dGdMu(1,1)          = - one
+      dGdMu(2:nIons+2,1)  = zero
+
+      ! (6.6) calculate dLocal/dMU
+      dLocaldMu  = - matmul( Inv(fjac), dGdMu)
+
+      ! (6.7) split dLocal/dMu to dCw/dMu, dCion/dMu, dPsi/dMu
+      dCwdMu              = dLocaldMu(1,1)
+      dCiondMu(1:nIons)   = dLocaldMu(2:nIons+1,1)
+      dPsidMu             = dLocaldMu(nIons+2,1)
+
+
+
+      ! (6.8) form the dG_i/dOmg_j vector (nIons copies)
+      dGdOmg = zero             ! initialize
+      do k = 1, nIons
+        dGdOmg(k,1)       = zero
+        dGdOmg(k,k+1)     = -one
+        dGdOmg(k,nIons+2) = Cw_new/RT * Zion(k) *
+     &              exp( ( Omg(k) - Fcon*Zion(k)*psi_new
+     &                  - press*Vion(k) - Omg0(k) ) /RT )
+      end do
+
+
+      ! (6.9) calculate dLocal/dOmg_i and
+      ! then split it to dCw/dOmg_i, dCion_i/dOmg_j
+      ! dCiondOmg(i,j) represents dCion_j/dOmg_i
+      ! i.e. omega varies row wise Cion varies column wise and
+      do k = 1, nIons
+        dGdOmg_k(1:nIons+2,1)  = dGdOmg(k,1:nIons+2)
+
+        dLocaldOmg_k          = - matmul( Inv(fjac), dGdOmg_k )
+
+        dLocaldOmg(k,:)       = dLocaldOmg_k(:,1)
+
+        dCwdOmg(k)            = dLocaldOmg_k(1,1)
+        dCiondOmg(k,1:nIons)  = dLocaldOmg_k(2:nIons+1,1)
+        dPsidOmg(k)           = dLocaldOmg_k(nIons+2,1)
+      end do
+
+
+
+
+      ! (7) calculate dS/dCw (a symmetric second order tensor)
       dSdCwTensor =  Kappa * Vw * ( log(detFe) - one ) * CInv
 
 
-      ! (7) calculate material tangent (Cmat = 2*dS/dC)
+
+      ! (8) calculate material tangent (Cmat = 2*dS/dC)
+      Cmat = zero
       do i = 1,3
         do j = 1,3
           do k = 1,3
             do l = 1,3
-                Cmat(i,j,k,l) = Cmat(i,j,k,l)
+              Cmat(i,j,k,l) = Cmat(i,j,k,l)
      &            + Kappa * phi0 * detFs * CInv(i,j) * CInv(k,l)
      &            + ( (phi0)**(two/three) * Gshear
      &            - Kappa * phi0 * detFs * log(detFe) )
-     &            * ( CInv(i,k) * CInv(j,l) + CInv(i,l) * CInv(j,k) )
+     &              * ( CInv(i,k) * CInv(j,l) + CInv(i,l) * CInv(j,k) )
      &            + two * dSdCwTensor(i,j) * dCwdCTensor(k,l)
-              end do
             end do
           end do
         end do
+      end do
 
 
-      ! (8.1) Calculate F*dSdCwTensor*dCwdMu
-      FSTensorUM  = matmul(F,dSdCwTensor) * dCwdMu
 
-      ! reshape into vector form
-      aVectUM     = reshape( FSTensorUM, [nDim*nDim, 1])
+      ! (9.1) calculate dSdMuTensor
+      dSdMuTensor =  dSdCwTensor * dCwdMu
+
+      ! (9.2) calculate FSTensorUM
+      FSTensorUM  = matmul(F,dSdMuTensor)
+
+      ! (9.3) reshape FSTensorUM into vector form
+      aVectUM     = reshape( FSTensorUM(1:nDim,1:nDim), [nDim*nDim,1] )
 
 
-      ! (8.2) Calculate F*dSdCwTensor*dCwdOmg
+
+      ! (10.1) calculate dSdOmgTensor
+      do k = 1, nIons
+        dSdOmgTensor(k,:,:) =  dSdCwTensor * dCwdOmg(k)
+      end do
+
+
+      ! (10.1) calculate FSTensorUI
       FSTensorUI  = zero
       do k = 1, nIons
-        FSTensorUI(k,:,:) = matmul(F,dSdCwTensor) * dCwdOmg(k)
+        FSTensorUI(k,:,:) = matmul( F,dSdOmgTensor(k,:,:) )
       end do
 
-      ! reshape into vector form
+      ! reshape FSTensorUI into vector form
       do k = 1, nIons
-        aVectUI(k,:,:)   = reshape( FSTensorUI(k,:,:), [nDim*nDim, 1])
+        aVectUI(k,:,:)   = reshape( FSTensorUI(k,1:nDim,1:nDim),
+     &                              [nDim*nDim,1] )
       end do
 
 
 
-      ! (9.1) Jw tensor
+      ! (11.1) Jw tensor = dJw/dF (FIX)
+      dJwdFTensor = zero
       do i = 1, nDim
         do k = 1, nDim
           do l = 1, nDim
             do j = 1, nDim               ! summation over dummy index j
-              JwTensor(i,k,l) = JwTensor(i,k,l)
+              dJwdFTensor(i,k,l) = dJwdFTensor(i,k,l)
      &            + (Dw*Cw_new)/RT
      &            * ( FInv(i,k)*CInv(l,j) ) * dMudX(j,1)
      &            - (Dw/RT) * CInv(i,j) * dMudX(j,1) * dCwdFTensor(k,l)
@@ -1474,23 +1551,38 @@
         end do
       end do
 
-      ! map the third-order tensor, JwTensor, to a rank-2 matrix
+
+      ! (11.2) map the third-order tensor, dJw/dF, to a rank-2 matrix
+      DmatMU  = zero
       do i = 1, nDim
         do l = 1, nDim
           do k = 1, nDim
-            DmatMU(i,(l-1)*nDim+k) = JwTensor(i,k,l)
+            DmatMU(i,(l-1)*nDim+k) = dJwdFTensor(i,k,l)
           end do
         end do
       end do
 
 
-      ! (9.2) Jion tensor
+      ! (11.3) calculate dJw/dMu
+      dJwdMu  = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX) * dCwdMu
+
+
+      ! (11.4) calculate dJwd/Omg
+      do k = 1, nIons
+        dJwdOmg(k,:,:) = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX)
+     &                    * dCwdOmg(k)
+      end do
+
+
+
+      ! (12.1) Jion tensor = dJion/dF (FIX)
+      dJiondFTensor   = zero
       do n = 1,nIons
         do i = 1, nDim
           do k = 1, nDim
             do l = 1, nDim
               do j = 1, nDim               ! summation over dummy index j
-                JiTensor(n,i,k,l) = JiTensor(n,i,k,l)
+                dJiondFTensor(n,i,k,l) = dJiondFTensor(n,i,k,l)
      &            + ( Dion(n)*Cion_new(n) )/RT
      &            * ( FInv(i,k)*CInv(l,j) ) * dOmgdX(n,j,1)
      &            - ( Dion(n)/RT ) * CInv(i,j)
@@ -1502,36 +1594,27 @@
       end do
 
 
-      ! map the third-order tensor, JiTensor, to a rank-2 matrix
+      ! (12.2) map the third-order tensor, dJion/dF, to a rank-2 matrix
+      DmatIU  = zero
       do n = 1, nIons
         do i = 1, nDim
           do l = 1, nDim
             do k = 1, nDim
-              DmatIU(n,i,(l-1)*nDim+k) = JiTensor(n,i,k,l)
+              DmatIU(n,i,(l-1)*nDim+k) = dJiondFTensor(n,i,k,l)
             end do
           end do
         end do
       end do
 
 
-
-
-      ! (10.1) calculate dJwdMu
-      dJwdMu = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX) * dCwdMu
-
-      ! (10.2) calculate dJwdOmg
-      do k = 1, nIons
-        dJwdOmg(k,:,:) = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX)
-     &                    * dCwdOmg(k)
-      end do
-
-      ! (10.3) calculate dJiondMu
+      ! (12.3) calculate dJiondMu
+      dJidMu     = zero
       do k = 1, nIons
         dJidMu(k,:,:) = - (Dion(k)/RT) *
      &        matmul( CInv(1:nDim,1:nDim),dOmgdX(k,:,:) ) * dCiondMu(k)
       end do
 
-      ! (10.4) calculate dJiondOmg
+      ! (12.4) calculate dJiondOmg
       dJidOmg     = zero
       do k = 1, nIons
         dJidOmg(k,k,:,:) = - (Dion(k)/RT) *
@@ -1539,30 +1622,27 @@
       end do
 
 
-
-
-      ! (11) All other time derivatives
+      ! (13) All other time derivatives
       dCwdotdMu       = dCwdMu/dtime
 
       dCwdotdOmg      = dCwdOmg/dtime
 
-      dCidotdMu       = dCiondMu/time
+      dCidotdMu       = dCiondMu/dtime
 
       dCidotdOmg      = dCiondOmg/dtime
 
       dCwdotdFTensor  = dCwdFTensor/dtime
       dCwdotdF        = reshape( dCwdotdFTensor(1:nDim,1:nDim),
-     &                          shape(dCwdotdF) )
+     &                          [1,nDim*nDim] )
 
       dCidotdFTensor  = dCiondFTensor/dtime
 
       do k = 1, nIons
-        dCidotdF(k,:,:)        = reshape
-     &    ( dCidotdFTensor(k,1:nDim,1:nDim), shape( dCidotdF(k,:,:) ) )
+        dCidotdF(k,:,:)   = reshape( dCidotdFTensor(k,1:nDim,1:nDim),
+     &                          [1,nDim*nDim] )
       end do
 
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+      !!!!!!!!!!!!!!!!! END ELEMENT TANGENT QUANTITITES !!!!!!!!!!!!!!!!
 
 
 
@@ -1580,8 +1660,6 @@
       call voigtMatrixTruncate(VoigtMat,Dmat)
 
       !!!!!!!!!!!! END ANALYSIS-BASED RESHAPING OF TENSORS !!!!!!!!!!!!!
-
-
 
 
 
@@ -1642,13 +1720,13 @@
       real(wp)          :: phi0, rho, Gshear, Kappa, lam_L
       real(wp)          :: Cp_fix, Vp, Zp
       real(wp)          :: mu0, Vw, chi, Dw
-      real(wp)          :: omg0(size(x)-2), Cion0(size(x)-2)
+      real(wp)          :: Omg0(size(x)-2), Cion0(size(x)-2)
       real(wp)          :: Vion(size(x)-2), Zion(size(x)-2)
       real(wp)          :: Dion(size(x)-2)
-      real(wp)          :: I1, detF, mu, omg(size(x)-2)
+      real(wp)          :: trC, detF, mu, Omg(size(x)-2)
       real(wp)          :: term1, term2
 
-      real(wp)          :: phi, lagrangeMult, press
+      real(wp)          :: phi, lagrangeMult, press, CionTotal
       integer           :: nIons, k, l
 
       type(logger)      :: msg
@@ -1677,7 +1755,7 @@
 
       do k = 1, nIons
         Cion0(k)  = vars( 16 + nIonProps*(k-1) )
-        omg0(k)   = vars( 17 + nIonProps*(k-1) )
+        Omg0(k)   = vars( 17 + nIonProps*(k-1) )
         Vion(k)   = vars( 18 + nIonProps*(k-1) )
         Zion(k)   = vars( 19 + nIonProps*(k-1) )
         Dion(k)   = vars( 20 + nIonProps*(k-1) )
@@ -1692,12 +1770,12 @@
       !!!!!!!!!!!!!!!!!!! CALCULATE INTERMEDIATE VARS !!!!!!!!!!!!!!!!!!
 
       ! get the internal variables
-      I1    = vars( 21 + nIonProps*(nIons-1) )
+      trC   = vars( 21 + nIonProps*(nIons-1) )
       detF  = vars( 22 + nIonProps*(nIons-1) )
       mu    = vars( 23 + nIonProps*(nIons-1) )
 
       do k = 1, nIons
-        omg(k) = vars( 23 + nIonProps*(nIons-1) + k )
+        Omg(k) = vars( 23 + nIonProps*(nIons-1) + k )
       end do
 
 
@@ -1707,8 +1785,8 @@
       lagrangeMult  = Kappa/two * ( log(detF*phi/phi0) )**two
      &                - Kappa * ( log(detF*phi/phi0) )
 
-      press   = Gshear*phi/(three*phi0) *
-     &            ( three * phi0**(two/three) - I1 )
+      press   = (Gshear*phi)/(three*phi0)
+     &            * ( three * phi0**(two/three) - trC )
      &            - Kappa * ( log(detF*phi/phi0) )
 
 
@@ -1732,7 +1810,7 @@
 
       ! (2-n+1) constititutive equation for each ion (omega)
       do k = 1, nIons
-        fvec(k+1) = omg0(k) + RT*log( x(k+1)/x(1) )
+        fvec(k+1) = Omg0(k) + RT*log( x(k+1)/x(1) )
      &            + Fcon * Zion(k) * x(nIons+2)
      &            + press * Vion(k) - Omg(k)
         end do
@@ -1744,7 +1822,9 @@
       do k = 1, nIons
         fvec(nIons+2) = fvec(nIons+2) +
      &     x(1) * Zion(k) * exp
-     &     ((omg(k)-Fcon*Zion(k)*x(nIons+2)-press*Vion(k)-omg0(k))/RT)
+     &      (
+     &       (Omg(k)-Fcon*Zion(k)*x(nIons+2)-press*Vion(k)-Omg0(k))/RT
+     &      )
       end do
 
       !!!!!!!!!!!!!!!!!!! END LOCAL RESIDUAL VECTOR !!!!!!!!!!!!!!!!!!!!
@@ -1755,34 +1835,39 @@
 
       if ( present(fjac) ) then
 
-        fjac  = zero
+        fjac  = zero          ! initialize
 
-        term1 = ( Gshear/(three*phi0) ) *
-     &          ( I1 - three*(phi0)**(two/three) ) + Kappa/phi
-
-        fjac(1,1) = -(Vw/phi0) * phi**two  *
-     &            (
-     &              RT*(one - one/(one-phi) + two*chi*phi)
-     &              + Kappa*Vw/phi*( log(detF*phi/phi0) - one)
-     &            )
-
-        ! first row of jacobian matrix
+        ! total ion concentration
+        CionTotal = zero
         do k = 1, nIons
-          fjac(1,1)       = fjac(1,1) + RT*x(k+1)/x(1)**two
+          CionTotal = CionTotal + x(k+1)
         end do
 
+        ! first element (1,1): dG1/dCw
+        fjac(1,1) = -(Vw/phi0) * phi**two  *
+     &            (
+     &                RT*(one - one/(one-phi) + two*chi*phi)
+     &              + Kappa*Vw/phi*( log(detF*phi/phi0) - one)
+     &            )
+     &              + (RT/x(1)**two) * CionTotal
+
+        ! rest of the row (1,2:nIons+1) => (dG_1/dCion_k)
         do k = 1, nIons
           fjac(1,k+1)     = - RT/x(1)
         end do
 
+        ! last element of the first row (1,nIons+2) => (dG1/dpsi = 0)
         fjac(1,nIons+2)   = zero
 
 
-        ! center block of the jacobian matrix
+        term1 = ( Gshear/(three*phi0) ) *
+     &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi
+
+        ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
         do k = 1, nIons
 
-          term2             = exp( ( omg(k) - Fcon*Zion(k)*x(nIons+2)
-     &                        - press*Vion(k) - omg0(k) ) /RT )
+          term2             = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
+     &                        - press*Vion(k) - Omg0(k) ) /RT )
 
           fjac(k+1,1)       = (phi**two/phi0) * Vw * term1 * Vion(k)
      &                        - RT/x(1)
@@ -1793,12 +1878,12 @@
 
         end do
 
-
-        ! last row of the jacobian
+        !!  last row
+        ! first element of last row of the jacobian (nIons+2,1) => dG_n+2/dCw
         do k = 1, nIons
 
-          term2   = exp( ( omg(k) - Fcon*Zion(k)*x(nIons+2)
-     &                  - press*Vion(k) - omg0(k) ) /RT )
+          term2   = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
+     &                  - press*Vion(k) - Omg0(k) ) /RT )
 
           fjac(nIons+2,1) = fjac(nIons+2,1) +
      &          Zion(k) * term2 *
@@ -1808,12 +1893,14 @@
 
         end do
 
+        ! all the middle columns(nIons+2,2:nIons+1) => dG_n+2/dCion_k = 0
         fjac(nIons+2,2:nIons+1)     = zero
 
+        ! last term of the last row (nIons+2,nIons+2)
         do k = 1, nIons
 
-          term2   = exp( ( omg(k) - Fcon*Zion(k)*x(nIons+2)
-     &                  - press*Vion(k) - omg0(k) ) /RT )
+          term2   = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
+     &                  - press*Vion(k) - Omg0(k) ) /RT )
 
           fjac(nIons+2,nIons+2) = fjac(nIons+2,nIons+2)
      &            - ( Fcon*x(1)/RT ) * Zion(k)**two * term2
@@ -1830,9 +1917,9 @@
 ! **********************************************************************
 
       subroutine assembleElement(nNode,nIons,
-     &          uDOFEL,mDOFEL,iDOFEL,nDOFEL,
-     &          Kuu,Kum,Kui,Kmu,Kmm,Kmi,Kiu,Kim,Kii,Ru,Rm,Ri,
-     &          Kelem,Relem)
+     &            uDOFEL,mDOFEL,iDOFEL,nDOFEL,
+     &            Kuu,Kum,Kui,Kmu,Kmm,Kmi,Kiu,Kim,Kii,Ru,Rm,Ri,
+     &            Kelem,Relem)
 
       ! This subroutine performs assembly of the element residual
       ! vectors and the element tangent matrix of a linear element.
@@ -1841,8 +1928,11 @@
 
       implicit none
 
+      ! element topology and degrees of freedom related parameters
       integer, intent(in)   :: nNode, nIons
       integer, intent(in)   :: uDOFEL, mDOFEL, iDOFEL, nDOFEL
+
+      ! element tangent matrix and residual vector components
       real(wp), intent(in)  :: Kuu(uDOFEL,uDOFEL)
       real(wp), intent(in)  :: Kum(uDOFEL,mDOFEL)
       real(wp), intent(in)  :: Kmu(mDOFEL,uDOFEL)
@@ -1855,19 +1945,25 @@
       real(wp), intent(in)  :: Ru(uDOFEL,1)
       real(wp), intent(in)  :: Rm(mDOFEL,1)
       real(wp), intent(in)  :: Ri(nIons,iDOFEL,1)
+
+      ! combined element tangent matrix and residual vector output variables
       real(wp), intent(out) :: Kelem(nDOFEL,nDOFEL)
       real(wp), intent(out) :: Relem(nDOFEL,1)
+
+      ! variables to be used within the subroutine
       integer               :: uDOF, mDOF, iDOF, iNDOF, nDOF
       integer               :: R11, R12, C11, C12
       integer               :: i, j, k, l
+
+
+      ! initialize the element tangent matrix and residual vector
+      Kelem = zero
+      Relem = zero
 
       uDOF  = uDOFEL/nNode
       mDOF  = 1
       iNDOF = 1*nIons
       nDOF  = uDOF + mDOF + iNDOF       ! nDOF = nNOFEL/ nNODE
-
-      Kelem = zero
-      Relem = zero
 
       do i = 1, nNode
 
@@ -1937,10 +2033,10 @@
      & NPREDF,LFLAGS,MLVARX,DDLMAG,MDLOAD,PNEWDT,JPROPS,NJPROPS,PERIOD)
 
       ! This subroutine is called by Abaqus with following arguments
-      ! for each user elements defined in an Abaqus model. Users are
+      ! for each user elements defined in an Abaqus model. User is
       ! responsible for programming the element tangent/ stiffness
-      ! matrix and residual vectors which will be then assembled and
-      ! solved by Abaqus after applying the boundary conditions.
+      ! matrix and residual vector which will be then assembled and
+      ! solved by Abaqus after applying the boundary conditions
 
       use global_parameters
       use error_logging
@@ -1978,11 +2074,22 @@
       integer           :: iDOF, iDOFEL, nIons, iNDOFEL
 
 
-      integer           :: lenJobName,lenOutDir
-      character(len=256):: outDir
-      character(len=256):: jobName
-      character(len=512):: errFile, dbgFile
-      type(logger)      :: msg
+      logical, parameter  :: dbgMode = .false.
+      integer             :: lenJobName,lenOutDir
+      character(len=256)  :: outDir
+      character(len=256)  :: jobName
+      character(len=512)  :: errFile, dbgFile
+      type(logger)        :: msg
+
+
+      ! open a log files for the current job from Abaqus job
+      if (dbgMode .eq. .false.) then
+        call getJobName(jobName, lenJobName)
+        call getOutDir(outDir, lenOutDir)
+        errFile = trim(outDir)//'\aaERR_'//trim(jobName)//'.dat'
+        dbgFile = trim(outDir)//'\aaDBG_'//trim(jobName)//'.dat'
+        call msg%fopen( errfile=errFile, dbgfile=dbgFile )
+      end if
 
 
       ! initialize primary output variable to be zero
@@ -1991,22 +2098,15 @@
       energy        = zero
 
 
-      ! open a debug file for the current job
-      call getJobName(jobName, lenJobName)
-      call getOutDir(outDir, lenOutDir)
-      errFile = trim(outDir)//'\aaERR_'//trim(jobName)//'.dat'
-      dbgFile = trim(outDir)//'\aaDBG_'//trim(jobName)//'.dat'
-      call msg%fopen( errfile=errFile, dbgfile=dbgFile )
-
-
       ! change the LFLAGS criteria as needed (check abaqus UEL manual)
       if((lflags(1) .eq. 72) .or. (lflags(1) .eq. 73)) then
         abqProcedure = 'COUPLED'
       else
         call msg%ferror(flag=error, src='UEL',
-     &            msg='Incorrect Abaqus procedure.', ia=lflags(1))
+     &            msg='Incorrect Abaqus procedure: ', ia=lflags(1))
         call xit
       end if
+
 
       ! check if the procedure is linear or nonlinear
       if (lflags(2) .eq. 0) then
@@ -2015,10 +2115,11 @@
         nlgeom = .true.
       end if
 
+
       ! check to see if it's a general step or a linear purturbation step
       if(lflags(4) .eq. 1) then
         call msg%ferror(flag=error, src='UEL',
-     &        msg='The step should be a GENERAL step.', ia=lflags(4))
+     &        msg='The step should be a GENERAL step: ', ia=lflags(4))
         call xit
       end if
 
@@ -2030,47 +2131,40 @@
         nStress   = 6
       else if ( (jtype .eq. 3) .or. (jtype .eq. 4) ) then
         nDim      = 2
-        analysis  = 'PE'         ! plane strain analysis
+        analysis  = 'PE'         ! 2D plane-strain analysis
         nStress   = 3
       else
-        call msg%ferror(error,src='uel',msg='Element Unavailable.')
+        call msg%ferror(error,src='uel',
+     &            msg='Element type is unavailable: ', ia=jtype)
         call xit
       end if
 
-      ! no of surface integration points for calculating flux
-      if (jtype .eq. 2) then
-        nIntS = 4
-      else if (jtype .eq. 4) then
-        nIntS = 2
-      end if
 
+      uDOF      = nDim                ! no of displacement degrees of freedom/ node
+      mDOF      = 1                   ! no of chem potential degrees of freedom/ node
+      iDOF      = 1                   ! no of e-chem potential degrees of freedom/ node/ ion
 
-      uDOF      = nDim
-      uDOFEL    = uDOF*nNode
-      mDOF      = 1
-      mDOFEL    = mDOF*nNode
-      iDOF      = 1
-      iDOFEL    = iDOF*nNode
+      uDOFEL    = uDOF*nNode          ! no of displacement degrees of freedom/ element
+      mDOFEL    = mDOF*nNode          ! no of chem potential degrees of freedom/ element
+      iDOFEL    = iDOF*nNode          ! no of e-chem potential degrees of freedom/ element/ ion
       iNDOFEL   = nDOFEL - uDOFEL - mDOFEL
-      nIons     = iNDOFEL/nNode
 
+      nIons     = iNDOFEL/nNode       ! no of ions in the model
 
-      nInt      = jprops(1)     ! # int pt for vector element
-      matID     = jprops(2)     ! # material constitutive model
-      nIonProps = jprops(3)     ! # properties for each ion
-      nPostVars = jprops(4)     ! # post prcoessing variable / intpt
+      nInt      = jprops(1)           ! # int pt for vector element
+      matID     = jprops(3)           ! # material constitutive model
+      nIonProps = jprops(4)           ! # properties for each ion
+      nPostVars = jprops(5)           ! # post prcoessing variable / intpt
+      
 
-
-      ! allocate the user-defined post-processing array variable
+      ! allocate the user-defined post-processing variable array
       if ( .not. allocated(globalPostVars) ) then
 
         allocate( globalPostVars(numElem,nInt,nPostVars) )
 
         ! print necessary information to the debug file (first time)
         call msg%finfo('---------------------------------------')
-        call msg%finfo('---- Abaqus POLYELECTROLYTEGEL UEL ----')
-        call msg%finfo('---------------------------------------')
-        call msg%finfo('--- Abaqus Job: ', ch=trim(jobName))
+        call msg%finfo('---- Abaqus POLYELECTROLYTE GEL UEL ----')
         call msg%finfo('---------------------------------------')
         call msg%finfo('------- PROCEDURE       = ', ch=abqProcedure)
         call msg%finfo('------- ANALYSIS TYPE   = ', ch=analysis)
@@ -2086,10 +2180,11 @@
         call msg%finfo('--- OVERLAY ELEMENT OFFSET    = ',ia=elemOffset)
         call msg%finfo('--- NO OF VARIABLES AT INT PT = ',ia=nPostVars)
         call msg%finfo('---------------------------------------')
+
       end if
 
       ! return when Abaqus performs dummy step calculation with dt = 0
-      if( dtime .eq. zero) return
+      if( dtime .eq. zero ) return
 
       ! call the first-order polyelectrolyte gel element subroutine
       if ((jtype .ge. 1) .or. (jtype .le. 4)) then
@@ -2101,7 +2196,7 @@
      &    NINTS,UDOF,UDOFEL,MDOF,MDOFEL,IDOF,IDOFEL)
       else
         call msg%ferror(flag=error, src='UEL',
-     &                  msg='Quadratic elements are unavailable.')
+     &                  msg='Wrong element type: ', ia=jtype)
         call xit
       end if
 
