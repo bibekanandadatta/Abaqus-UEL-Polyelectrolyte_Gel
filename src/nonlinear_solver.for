@@ -14,8 +14,8 @@
       ! last two attributes are not applicable to single variable solver
       type, public  :: options
         integer           :: maxIter    = 1000
-        real(wp)          :: tolfx      = 1.0e-8_wp      
-        real(wp)          :: tolx       = 1.0e-8_wp      
+        real(wp)          :: tolfx      = 1.0e-10_wp      
+        real(wp)          :: tolx       = 1.0e-10_wp      
         character(len=8)  :: fdScheme   = 'Central'       ! other: 'Forward', 'Backward', 'Central'
         real(wp)          :: fdStep     = sqrt(eps)
         character(len=16) :: algo       = 'Linesearch'    ! options: 'Newton', 'Linesearch'

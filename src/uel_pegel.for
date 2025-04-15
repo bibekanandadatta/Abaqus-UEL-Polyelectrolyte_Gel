@@ -137,15 +137,15 @@
 ! **********************************************************************
 
       ! make sure to have the correct directory
-      include '../module/global_parameters.for'     ! global parameters module
-      include '../module/error_logging.for'         ! error/ debugging module
-      include '../module/linear_algebra.for'        ! linear algebra module
-      include '../module/lagrange_element.for'      ! Lagrange element module
-      include '../module/gauss_quadrature.for'      ! Guassian quadrature module
-      include '../module/surface_integration.for'   ! surface integration module
-      include '../module/nonlinear_solver.for'      ! Newton-Raphson solver module
-      include '../module/solid_mechanics.for'       ! solid mechanics module
-      include '../module/post_processing.for'       ! post-processing module
+      include 'global_parameters.for'     ! global parameters module
+      include 'error_logging.for'         ! error/ debugging module
+      include 'linear_algebra.for'        ! linear algebra module
+      include 'lagrange_element.for'      ! Lagrange element module
+      include 'gauss_quadrature.for'      ! Guassian quadrature module
+      include 'surface_integration.for'   ! surface integration module
+      include 'nonlinear_solver.for'      ! Newton-Raphson solver module
+      include 'solid_mechanics.for'       ! solid mechanics module
+      include 'post_processing.for'       ! post-processing module
 ! **********************************************************************
 ! **********************************************************************
 
@@ -334,6 +334,7 @@
       integer           :: nstatev
       type(logger)      :: msg
       type(element)     :: hydrogel
+      
 
 
       ! initialize polyelectrolyte hydrogel element
@@ -638,7 +639,7 @@
           end do
         end do
 
-        BNLmat  = matmul(Bmat,SIGMA_F)
+        BNLmat  = matmul(Bmat,transpose(SIGMA_F))
         BNLmatT = transpose(BNLmat)
 
         !!!!!!!!!! END FORMING ADDITIONAL ELEMENT OPERATORS !!!!!!!!!!!
@@ -1028,6 +1029,7 @@
       integer           :: i, j, k, l, m, n
       integer           :: nIonProps
       type(logger)      :: msg
+      type(options)     :: solverOpts
 
 
       ! initialize matrial stiffness tensors
@@ -1143,11 +1145,20 @@
       vars(nprops+3)        = mu
       vars(nprops+4:nprops+4+nIons-1) = Omg(1:nIons)
 
+      ! set the local nonlinear solver options
+      solverOpts%maxIter    = 2000
+      solverOpts%tolfx      = 1.0e-9_wp
+      solverOpts%tolx       = 1.0e-9_wp
+      solverOpts%algo       = 'Linesearch'
+      solverOpts%lib        = 'LAPACK'
+      solverOpts%method     = 'LU'
 
       ! call the nonlinear solver to solve for internal variables
       call fsolve(electroChemicalState, rootsOld, roots,
-     &              .true., vars=vars, sflag=intVarsFlag)
+     &              jac=.true., vars=vars, opts=solverOpts, 
+     &              sflag=intVarsFlag)
 
+      ! print out the details if nonlinear solver fails
       if (intVarsFlag .eq. .false.) then 
         call msg%ferror(flag=error, src='umat_pe_hydrogel',
      &        msg='No solution for the internal variables: ',
@@ -1183,11 +1194,10 @@
       detFs             = one/phi_new
       detFe             = detF/(phi0*detFs)
 
-      ! total ion concentration
-      CionTotal     = zero
-      do k = 1, nIons
-        CionTotal   = CionTotal + Cion_new(k)
-      end do
+      ! total ion concentration and charge quantitity
+      CionTotal     = sum( Cion_new )
+
+      chargeTotal   = dot_product( Cion_new,Zion ) + Cp_fix*Zp
 
       ! internal variables are: phi_new, Cion_new(nIons), psi_new
       ! there are (nIons+2) state variables per integration point
@@ -1378,7 +1388,7 @@
           dGdF_kL(nIons+2,1)  = dGdFTensor(nIons+2,k,l)
 
           ! solution for each k,L component
-          dLocaldF_kL    = - matmul( Inv(fjac), dGdF_kL )
+          dLocaldF_kL    = - matmul( inv(fjac), dGdF_kL )
 
           ! split it into tensors: dCw/dF_kL, dCion_i/dF_kL, dPsi/dF_kL
           dCwdFTensor(k,l)            = dLocaldF_kL(1,1)
@@ -1412,7 +1422,7 @@
       end do
 
 
-      ! (6.4) calculate dLocal/dC
+      ! (6.4) calculate dLocal/dC_kL
       do k = 1,3
         do l = 1,3
 
@@ -1426,7 +1436,7 @@
           dGdC_kL(nIons+2,1)  = dGdCTensor(nIons+2,k,l)
 
           ! solution for each k,L component
-          dLocaldC_kL    = - matmul( Inv(fjac), dGdC_kL )
+          dLocaldC_kL    = - matmul( inv(fjac), dGdC_kL )
 
           ! split it into appropriate tensors: dCw/dF_kL and dCion_i/dF_kL
           dCwdCTensor(k,l)            = dLocaldC_kL(1,1)
@@ -1442,7 +1452,7 @@
       dGdMu(2:nIons+2,1)  = zero
 
       ! (6.6) calculate dLocal/dMU
-      dLocaldMu  = - matmul( Inv(fjac), dGdMu)
+      dLocaldMu           = - matmul( inv(fjac), dGdMu)
 
       ! (6.7) split dLocal/dMu to dCw/dMu, dCion/dMu, dPsi/dMu
       dCwdMu              = dLocaldMu(1,1)
@@ -1452,7 +1462,7 @@
 
 
       ! (6.8) form the dG_i/dOmg_j vector (nIons copies)
-      dGdOmg = zero             ! initialize
+      dGdOmg = zero                       ! initialize
       do k = 1, nIons
         dGdOmg(k,1)       = zero
         dGdOmg(k,k+1)     = -one
@@ -1467,9 +1477,9 @@
       ! dCiondOmg(i,j) represents dCion_j/dOmg_i
       ! i.e. omega varies row wise Cion varies column wise and
       do k = 1, nIons
-        dGdOmg_k(1:nIons+2,1)  = dGdOmg(k,1:nIons+2)
+        dGdOmg_k(1:nIons+2,1) = dGdOmg(k,1:nIons+2)
 
-        dLocaldOmg_k          = - matmul( Inv(fjac), dGdOmg_k )
+        dLocaldOmg_k          = - matmul( inv(fjac), dGdOmg_k )
 
         dLocaldOmg(k,:)       = dLocaldOmg_k(:,1)
 
@@ -1525,7 +1535,7 @@
       ! (10.1) calculate FSTensorUI
       FSTensorUI  = zero
       do k = 1, nIons
-        FSTensorUI(k,:,:) = matmul( F,dSdOmgTensor(k,:,:) )
+        FSTensorUI(k,:,:) = matmul( F, dSdOmgTensor(k,:,:) )
       end do
 
       ! reshape FSTensorUI into vector form
