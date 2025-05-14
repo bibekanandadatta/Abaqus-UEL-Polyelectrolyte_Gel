@@ -1,3 +1,4 @@
 # Abaqus-UEL-Polyelectrolyte_Gel
 
-Abaqus/Standard user element subroutines for coupled electro-chemo-mechanics of polyelectrolyte hydrogel. This repository is under development and unavailable to share to with public.
+Abaqus/Standard user element subroutines for coupled electro-chemo-mechanics of polyelectrolyte hydrogel.
+Publication for the work is under-preparation, and the repository is not currently available to public.

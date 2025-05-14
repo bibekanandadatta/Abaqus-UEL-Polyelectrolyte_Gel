@@ -479,19 +479,23 @@
 
 
       ! time stepping based on change in polymer volume fraction
+      ! adopted from Chester et al., IJSS (2015)
       phi_lmt   = 0.1_wp
       del_phi   = abs( (phi_new - phi_old)/phi_lmt )
 
       if ( del_phi .le. 0.5_wp ) then
         pnewdt = 1.50_Wp
+        return
       else if ( (del_phi .gt. 0.5_wp) .and. (del_phi .le. 0.8_wp) ) then
         pnewdt = 1.25_wp
+        return
       else if( (del_phi .gt. 0.8_wp) .and. (del_phi .le. 1.25_wp) ) then
         pnewdt = 0.75_wp
+        return
       else
         pnewdt = 0.5_wp
+        return
       endif
-
       !!!!!!!!!!!! END SOLVE AND UPDATE INERNAL VARIABLES !!!!!!!!!!!!!!
 
 
