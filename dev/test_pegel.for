@@ -70,11 +70,11 @@
 
 
       !! element type and element no
-      JTYPE       = 6           ! 4: QUAD4-AX and 6:QUAD4-PE
+      JTYPE       = 4           ! 4: QUAD4-AX and 6:QUAD4-PE
       JELEM       = 1           ! element no (ID) in patch test
       elemLen     = 1.0e-3_wp   ! element side length
 
-      fbarFlag    = 1
+      fbarFlag    = 0
       matID       = 1
 
 
@@ -93,14 +93,14 @@
         nNode     = 4         ! number of nodes
         nOrder    = 1         ! polynomial order of the lagrangian element
         nInt      = 4         ! number of integration points
-        fileName  = 'pe_gel_debug_AX_v2.dat'
+        fileName  = 'pe_gel_debug_AX.dat'
       else if (JTYPE .eq. 6) then   ! QUAD4 plane strain element
         nDim      = 2         ! spatial dimensions of the problem
         nStress   = 3         ! sigma_xx, sigma_yy, sigma_xy
         nNode     = 4         ! number of nodes
         nOrder    = 1         ! polynomial order of the lagrangian element
         nInt      = 4         ! number of integration points
-        fileName  = 'pe_gel_debug_PE_v2.dat'
+        fileName  = 'pe_gel_debug_PE.dat'
       else
         write(*,'(A)')  'Element is unavailable foe debugging: ', jtype
         stop

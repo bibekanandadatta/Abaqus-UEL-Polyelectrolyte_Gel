@@ -45,9 +45,9 @@
 !     Gshear    = props(6)        Shear modulus
 !     Kappa     = props(7)        Bulk modulus
 !     pKa       = props(8)        log of acid disassociation constant
-!     Cp_fix    = props(9)        Referential concentration of charged polymer
+!     C0_fix    = props(9)        Referential concentration of charged polymer
 !     Vp        = props(10)       Molar volume of polymer
-!     Zp        = props(11)       Charge number of polymer
+!     Zfix      = props(11)       Charge number of polymer
 !     mu0       = props(12)       Chemical potential of pure solvent
 !     Vw        = props(13)       Molar volume of the solvent
 !     chi       = props(14)       Flory-Huggins parameter
@@ -170,7 +170,8 @@
       subroutine neohookean_flory2(kstep,kinc,time,dtime,nDim,analysis,
      &          nStress,nNode,jelem,intpt,coord_ip,props,nprops,
      &          jprops,njprops,nIons,matID,F,mu,dMudX,Omg,dOmgdX,
-     &          svars,nsvars,fieldVar,dfieldVar,npredf,pnewdt,
+     &          svars,nsvars,statev,nstatev,
+     &          fieldVar,dfieldVar,npredf,pnewdt,
      &          stressTensorPK2,dCwdt,Jw,dCiondt,Jion,
      &          CTensor,
      &          FSTensorUM,dCwdFTensor,dJwdFTensor,dCwdMu,dJwdMu,MmatW,
@@ -194,7 +195,7 @@
 
       integer, intent(in)   :: kstep, kinc, nDim, nstress
       integer, intent(in)   :: nNode, jelem, intpt, nprops
-      integer, intent(in)   :: njprops, nsvars, npredf
+      integer, intent(in)   :: njprops, nsvars, nstatev, npredf
       integer, intent(in)   :: nIons, matID
 
       real(wp), intent(in)  :: time(2), dtime
@@ -232,7 +233,8 @@
       real(wp), intent(out) :: dCiondOmg(nIons,nIons)
 
       ! state variables that may be updated
-      real(wp), intent(inout), optional   :: svars(nsvars)
+      real(wp), intent(inout), optional   :: statev(nstatev)    ! local state vars/ int pt
+      real(wp), intent(inout), optional   :: svars(nsvars)      ! state vars / element (abaqus)
 
       ! local variables (kinematic quantities)
       real(wp)          :: detF, Finv(3,3), FInvT(3,3)
@@ -305,7 +307,7 @@
       ! local property variables
       real(wp)          :: Rgas, Fcon, theta, RT
       real(wp)          :: phi0, rho, Gshear, Kappa, pKa
-      real(wp)          :: Cp_fix, Vp, Zp
+      real(wp)          :: C0_fix, Vp, Zfix
       real(wp)          :: mu0, Vw, chi, Dw
       real(wp)          :: Cion0(nIons), Omg0(nIons), Vion(nIons)
       real(wp)          :: Zion(nIons), Dion(nIons)
@@ -335,9 +337,9 @@
       Gshear    = props(6)
       Kappa     = props(7)
       pKa       = props(8)
-      Cp_fix    = props(9)
+      C0_fix    = props(9)
       Vp        = props(10)
-      Zp        = props(11)
+      Zfix      = props(11)
       mu0       = props(12)
       Vw        = props(13)
       chi       = props(14)
@@ -387,7 +389,7 @@
 
         Cw_old    = (one - phi0)/Vw
 
-        chargeTotal   = dot_product(Cion0,Zion) + Cp_fix*Zp
+        chargeTotal   = dot_product(Cion0,Zion) + C0_fix*Zfix
 
         if ( abs(chargeTotal) .gt. 1.0e-3_wp ) then
           call msg%ferror( flag=error, src='neohookean_flory2',
@@ -397,15 +399,15 @@
         end if
 
       else
-        phi_old       = svars( (intPt-1)*(nIons+2) + 1 )
+        phi_old       = svars( (intPt-1)*nstatev + 1 )
 
         Cw_old        = phi0*(one/phi_old - one)/Vw
 
         do k = 1, nIons
-          Cion_old(k) = svars( (intPt-1)*(nIons+2) + k+1 )
+          Cion_old(k) = svars( (intPt-1)*nstatev + k+1 )
         end do
 
-        psi_old       = svars( (intPt-1)*(nIons+2) + nIons+2 )
+        psi_old       = svars( (intPt-1)*nstatev + nIons+2 )
       end if
 
 
@@ -466,14 +468,14 @@
       end do
 
       ! internal variables are: phi_new, Cion_new(nIons), psi_new
-      ! there are (nIons+2) state variables per integration point
-      svars( (intPt-1)*(nIons+2) + 1 )        = phi_new
+      ! there are "nstatev" state variables per integration point
+      svars( (intPt-1)*nstatev + 1 )        = phi_new
 
       do k = 1, nIons
-        svars( (intPt-1)*(nIons+2) + k+1 )    = Cion_new(k)
+        svars( (intPt-1)*nstatev + k+1 )    = Cion_new(k)
       end do
 
-      svars( (intPt-1)*(nIons+2) + nIons+2 )  = psi_new
+      svars( (intPt-1)*nstatev + nIons+2 )  = psi_new
 
 
       ! time stepping based on change in polymer volume fraction
@@ -988,7 +990,7 @@
 
       real(wp)          :: Rgas, Fcon, theta, RT
       real(wp)          :: phi0, rho, Gshear, Kappa, pKa
-      real(wp)          :: Cp_fix, Vp, Zp
+      real(wp)          :: C0_fix, Vp, Zfix
       real(wp)          :: mu0, Vw, chi, Dw
       real(wp)          :: Omg0(size(x)-2), Cion0(size(x)-2)
       real(wp)          :: Vion(size(x)-2), Zion(size(x)-2)
@@ -1015,9 +1017,9 @@
       Gshear    = vars(6)
       Kappa     = vars(7)
       pKa       = vars(8)
-      Cp_fix    = vars(9)
+      C0_fix    = vars(9)
       Vp        = vars(10)
-      Zp        = vars(11)
+      Zfix      = vars(11)
       mu0       = vars(12)
       Vw        = vars(13)
       chi       = vars(14)
@@ -1087,7 +1089,7 @@
 
 
       ! (n+2) electroneutrality condition for the the gel (polymer + ions)
-      fvec(nIons+2) = Cp_fix * Zp
+      fvec(nIons+2) = C0_fix * Zfix
 
       do k = 1, nIons
         fvec(nIons+2) = fvec(nIons+2) +
@@ -1128,7 +1130,6 @@
 
         ! last element of the first row (1,nIons+2) => (dG1/dpsi = 0)
         fjac(1,nIons+2)   = zero
-
 
         term1 = ( Gshear/(three*phi0) ) *
      &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi
@@ -1439,6 +1440,8 @@
       nIonProps = jprops(4)
       nstatev   = nsvars/nint
 
+      if ( .not. allocated(statev) ) allocate( statev(nstatev) )
+
       ! set the F-bar flag based on the input
       if (jprops(2) .eq. 0) then
         fbarFlag = .false.
@@ -1721,7 +1724,8 @@
         call neohookean_flory2(kstep,kinc,time,dtime,nDim,analysis,
      &          nStress,nNode,jelem,intpt,coord_ip,props,nprops,
      &          jprops,njprops,nIons,matID,Fbar,mu,dMudX,Omg,dOmgdX,
-     &          svars,nsvars,fieldVar,dfieldVar,npredf,pnewdt,
+     &          svars,nsvars,statev,nstatev,
+     &          fieldVar,dfieldVar,npredf,pnewdt,
      &          stressTensorPK2,dCwdt,Jw,dCiondt,Jion,
      &          CTensor,
      &          FSTensorUM,dCwdFTensor,dJwdFTensor,dCwdMu,dJwdMu,MmatW,
@@ -2294,7 +2298,7 @@
       nIonProps = jprops(4)
       nstatev   = nsvars/nint
 
-      if ( .not. allocated(statev) ) allocate(statev(nstatev) )
+      if ( .not. allocated(statev) ) allocate( statev(nstatev) )
 
       ! set the F-bar flag based on the input
       if (jprops(2) .eq. 0) then
@@ -2631,7 +2635,8 @@
         call neohookean_flory2(kstep,kinc,time,dtime,nDim,analysis,
      &          nStress,nNode,jelem,intpt,coord_ip,props,nprops,
      &          jprops,njprops,nIons,matID,Fbar,mu,dMudX,Omg,dOmgdX,
-     &          svars,nsvars,fieldVar,dfieldVar,npredf,pnewdt,
+     &          svars,nsvars,statev,nstatev,
+     &          fieldVar,dfieldVar,npredf,pnewdt,
      &          stressTensorPK2,dCwdt,Jw,dCiondt,Jion,
      &          CTensor,
      &          FSTensorUM,dCwdFTensor,dJwdFTensor,dCwdMu,dJwdMu,MmatW,
