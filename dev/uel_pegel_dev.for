@@ -560,7 +560,7 @@
 
       !! first row
       ! first element (1,1): dG1/dCw
-      fjac(1,1)   = - (phi_new**two/phi0) * Vw *
+      fjac(1,1)   = dPhidCw *
      &            (
      &              RT * (one - one/(one-phi_new) + two*chi*phi_new)
      &            - Kappa*Vw/phi_new
@@ -980,7 +980,7 @@
       real(wp)          :: Vion(size(x)-2), Zion(size(x)-2)
       real(wp)          :: Dion(size(x)-2)
       real(wp)          :: trC, detF, mu, Omg(size(x)-2)
-      real(wp)          :: dPressdCw, term1
+      real(wp)          :: dPhidCw, dPressdCw, term1
 
       real(wp)          :: phi, lagrangeMult, press, CionTotal
       integer           :: nIons, k, l
@@ -1099,8 +1099,10 @@
           CionTotal = CionTotal + x(k+1)
         end do
 
+        dPhidCw   = - (phi**two/phi0) * Vw
+
         ! first element (1,1): dG1/dCw
-        fjac(1,1) = -(Vw/phi0) * phi**two  *
+        fjac(1,1) = dPhidCw  *
      &            (
      &                RT*(one - one/(one-phi) + two*chi*phi)
      &              + Kappa*Vw/phi*( log(detF*phi/phi0) - one)
