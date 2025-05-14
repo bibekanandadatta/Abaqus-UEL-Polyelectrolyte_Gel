@@ -261,7 +261,7 @@
       ! local tangent tensors and related quantities
       real(wp)          :: dPhidCw, dCwdPhi
       real(wp)          :: fjac(nIons+2,nIons+2)
-      real(wp)          :: term1, term2, press
+      real(wp)          :: dPressdCw, term1, press
       real(wp)          :: dGdFTensor(nIons+2,3,3)
       real(wp)          :: dGdCTensor(nIons+2,3,3)
       real(wp)          :: dGdF_kL(nIons+2,1)
@@ -547,12 +547,15 @@
       fjac  = zero          ! initialize
 
       ! calculate the repetitive large terms
-      term1 = ( Gshear/(three*phi0) ) *
-     &        ( trC - three*(phi0)**(two/three) ) + Kappa/phi_new
-
       press   = (Gshear*phi_new)/(three*phi0)
      &            * ( three * phi0**(two/three) - trC )
      &            - Kappa * ( log(detF*phi_new/phi0) )
+
+      dPressdCw = (phi_new**two/phi0) * Vw * 
+     &        ( 
+     &          ( Gshear/(three*phi0) ) *
+     &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi_new 
+     &        )
 
 
       !! first row
@@ -577,11 +580,10 @@
 
       ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
       do k = 1, nIons
-        term2             = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
+        term1             = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
      &                      - press*Vion(k) - Omg0(k) ) /RT )
 
-        fjac(k+1,1)       = - RT/Cw_new
-     &                      + (phi_new**two/phi0) * Vw * term1 * Vion(k)
+        fjac(k+1,1)       = - RT/Cw_new +  dPressdCw * Vion(k)
 
         fjac(k+1,k+1)     = RT/Cion_new(k)
 
@@ -591,15 +593,12 @@
       !! last row
       ! first element of last row of the jacobian (nIons+2,1) => dG_n+2/dCw
       do k = 1, nIons
-        term2   = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
+        term1   = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
      &                  - press*Vion(k) - Omg0(k) ) /RT )
 
         fjac(nIons+2,1) = fjac(nIons+2,1) +
-     &          Zion(k) * term2 *
-     &          (
-     &            one - ( ( phi_new**two * Cw_new *Vw )/( RT*phi0 ) )
-     &                  * term1 * Vion(k)
-     &          )
+     &          Zion(k) * term1 *
+     &          ( one - (Cw_new/RT) * dPressdCw * Vion(k) )
       end do
 
       ! all the middle columns (nIons+2,2:nIons+1) => dG_n+2/dCion_k = 0
@@ -608,11 +607,11 @@
 
       ! last term of the last row (nIons+2,nIons+2)
       do k = 1, nIons
-        term2   = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
+        term1   = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
      &                  - press*Vion(k) - Omg0(k) ) /RT )
 
         fjac(nIons+2,nIons+2) = fjac(nIons+2,nIons+2)
-     &            - ( Fcon*Cw_new/RT ) * Zion(k)**two * term2
+     &            - ( Fcon*Cw_new/RT ) * Zion(k)**two * term1
       end do
 
 
@@ -981,7 +980,7 @@
       real(wp)          :: Vion(size(x)-2), Zion(size(x)-2)
       real(wp)          :: Dion(size(x)-2)
       real(wp)          :: trC, detF, mu, Omg(size(x)-2)
-      real(wp)          :: term1, term2
+      real(wp)          :: dPressdCw, term1
 
       real(wp)          :: phi, lagrangeMult, press, CionTotal
       integer           :: nIons, k, l
@@ -1116,17 +1115,19 @@
         ! last element of the first row (1,nIons+2) => (dG1/dpsi = 0)
         fjac(1,nIons+2)   = zero
 
-        term1 = ( Gshear/(three*phi0) ) *
-     &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi
+        dPressdCw = (phi**two/phi0) * Vw * 
+     &        ( 
+     &          ( Gshear/(three*phi0) ) *
+     &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi 
+     &        )
 
         ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
         do k = 1, nIons
 
-          term2             = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
+          term1             = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
      &                        - press*Vion(k) - Omg0(k) ) /RT )
 
-          fjac(k+1,1)       = (phi**two/phi0) * Vw * term1 * Vion(k)
-     &                        - RT/x(1)
+          fjac(k+1,1)       = - RT/x(1) + dPressdCw * Vion(k) 
 
           fjac(k+1,k+1)     = RT/x(k+1)
 
@@ -1138,14 +1139,12 @@
         ! first element of last row of the jacobian (nIons+2,1) => dG_n+2/dCw
         do k = 1, nIons
 
-          term2   = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
+          term1   = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
      &                  - press*Vion(k) - Omg0(k) ) /RT )
 
           fjac(nIons+2,1) = fjac(nIons+2,1) +
-     &          Zion(k) * term2 *
-     &       (
-     &        one - ( phi**two*x(1)*Vw )/( RT*phi0 ) * term1 * Vion(k)
-     &       )
+     &          Zion(k) * term1 *
+     &          ( one - ( x(1)/RT ) *  dPressdCw * Vion(k) )
 
         end do
 
@@ -1155,11 +1154,11 @@
         ! last term of the last row (nIons+2,nIons+2)
         do k = 1, nIons
 
-          term2   = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
+          term1   = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
      &                  - press*Vion(k) - Omg0(k) ) /RT )
 
           fjac(nIons+2,nIons+2) = fjac(nIons+2,nIons+2)
-     &            - ( Fcon*x(1)/RT ) * Zion(k)**two * term2
+     &            - ( Fcon*x(1)/RT ) * Zion(k)**two * term1
 
         end do
 
