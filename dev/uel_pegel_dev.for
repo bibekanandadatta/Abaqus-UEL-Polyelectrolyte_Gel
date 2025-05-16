@@ -3236,12 +3236,13 @@
       end if
 
       ! return when Abaqus performs dummy step calculation with dt = 0
+      ! to ensure no division by zero case is occuring (unlikely anyway)
       if( dtime .eq. zero ) return
 
-
-      ! call the first-order polyelectrolyte gel element subroutine
-      if ( (jtype .ge. 1) .and. (jtype .le. 2) ) then
-        ! this is for 3D elements
+      !! call the first-order polyelectrolyte gel element subroutine
+      select case (jtype)
+      case (1, 2, 5, 6)
+        ! (1) TET4, (2) HEX8, (5) TRI3-PE, and (6) QUAD4-PE
         call pegel_general(RHS,AMATRX,SVARS,ENERGY,NDOFEL,NRHS,
      &    NSVARS,PROPS,NPROPS,COORDS,MCRD,NNODE,Uall,DUall,Vel,Accn,
      &    JTYPE,TIME,DTIME,KSTEP,KINC,JELEM,PARAMS,NDLOAD,JDLTYP,
@@ -3249,8 +3250,8 @@
      &    JPROPS,NJPROPS,PERIOD,NDIM,ANALYSIS,NSTRESS,NIONS,NINT,
      &    NINTS,UDOF,UDOFEL,MDOF,MDOFEL,IDOF,IDOFEL)
 
-      else if ( (jtype .eq. 3) .or. (jtype .eq. 4) ) then
-        ! axisymmetric subroutine for TRI3 (3) and QUAD4 (4)
+      case (3, 4)
+        ! axisymmetric subroutine for (3) TRI3 and (4) QUAD4-AX
         call pegel_axisymmetric(RHS,AMATRX,SVARS,ENERGY,NDOFEL,NRHS,
      &    NSVARS,PROPS,NPROPS,COORDS,MCRD,NNODE,Uall,DUall,Vel,Accn,
      &    JTYPE,TIME,DTIME,KSTEP,KINC,JELEM,PARAMS,NDLOAD,JDLTYP,
@@ -3258,20 +3259,11 @@
      &    JPROPS,NJPROPS,PERIOD,NDIM,ANALYSIS,NSTRESS,NIONS,NINT,
      &    NINTS,UDOF,UDOFEL,MDOF,MDOFEL,IDOF,IDOFEL)
 
-      else if ( (jtype .ge. 5) .and. (jtype .le. 6) ) then
-        ! plane strain and plane stress (not available now)
-        call pegel_general(RHS,AMATRX,SVARS,ENERGY,NDOFEL,NRHS,
-     &    NSVARS,PROPS,NPROPS,COORDS,MCRD,NNODE,Uall,DUall,Vel,Accn,
-     &    JTYPE,TIME,DTIME,KSTEP,KINC,JELEM,PARAMS,NDLOAD,JDLTYP,
-     &    ADLMAG,PREDEF,NPREDF,LFLAGS,MLVARX,DDLMAG,MDLOAD,PNEWDT,
-     &    JPROPS,NJPROPS,PERIOD,NDIM,ANALYSIS,NSTRESS,NIONS,NINT,
-     &    NINTS,UDOF,UDOFEL,MDOF,MDOFEL,IDOF,IDOFEL)
-
-      else
+      case default
         call msg%ferror(flag=error, src='UEL',
      &                  msg='Wrong element type: ', ia=jtype)
         call xit
-      end if
+      end select
 
       END SUBROUTINE UEL
 
