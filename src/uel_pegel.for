@@ -261,6 +261,7 @@
       ! local tangent tensors and related quantities
       real(wp)          :: dPhidCw, dCwdPhi
       real(wp)          :: fjac(nIons+2,nIons+2)
+      real(wp)          :: fjacInv(nIons+2,nIons+2)
       real(wp)          :: dPressdCw, term1, press
       real(wp)          :: dGdFTensor(nIons+2,3,3)
       real(wp)          :: dGdCTensor(nIons+2,3,3)
@@ -387,7 +388,7 @@
         Cion_old  = Cion0               ! read the initial referential conc. of ion
         psi_old   = zero                ! read initial electric potential
 
-        Cw_old    = (one - phi0)/Vw
+        Cw_old        = (one - phi0)/Vw
 
         chargeTotal   = dot_product(Cion0,Zion) + C0_fix*Zfix
 
@@ -411,11 +412,18 @@
       end if
 
 
+      ! set the local nonlinear solver options
+      solverOpts%maxIter    = 2000
+      solverOpts%tolfx      = 1.0e-9_wp
+      solverOpts%tolx       = 1.0e-9_wp
+      solverOpts%algo       = 'Linesearch'
+      solverOpts%lib        = 'LAPACK'
+      solverOpts%method     = 'LU'
+
       ! initial conditions for the solver (previous state)
       rootsOld(1)           = Cw_old
       rootsOld(2:nIons+1)   = Cion_old(1:nIons)
       rootsOld(nIons+2)     = psi_old
-
 
       ! set the additional variables to be passed to the solver
       vars(1:nprops)        = props
@@ -424,13 +432,6 @@
       vars(nprops+3)        = mu
       vars(nprops+4:nprops+4+nIons-1) = Omg(1:nIons)
 
-      ! set the local nonlinear solver options
-      solverOpts%maxIter    = 2000
-      solverOpts%tolfx      = 1.0e-9_wp
-      solverOpts%tolx       = 1.0e-9_wp
-      solverOpts%algo       = 'Linesearch'
-      solverOpts%lib        = 'LAPACK'
-      solverOpts%method     = 'LU'
 
       ! call the nonlinear solver to solve for internal variables
       call fsolve(electroChemicalState, rootsOld, roots,
@@ -537,14 +538,10 @@
       ! (Cw, Cion) w.r.t the degrees of freedom (F, C, mu, omega, etc.)
       ! these quantities will be used in calculating the material tangents
 
-       ! (4) calculate dCw/dPhi and dPhi/dCw
+
+      ! (4) calculate dCw/dPhi and dPhi/dCw
       dPhidCw   = - (phi_new**two/phi0) * Vw
       dCwdPhi   = one/dPhidCw
-
-
-
-      ! (5) form the jacobian matrix of the local residuals
-      fjac  = zero          ! initialize
 
       ! calculate the repetitive large terms
       press   = (Gshear*phi_new)/(three*phi0)
@@ -557,6 +554,11 @@
      &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi_new 
      &        )
 
+
+
+
+      ! (5) form the jacobian matrix of the local residuals
+      fjac  = zero          ! initialize
 
       !! first row
       ! first element (1,1): dG1/dCw
@@ -615,6 +617,10 @@
       end do
 
 
+      ! invert the fjac matrix
+      fjacInv   = inv(fjac)
+
+
       !! (6.1) calculate dG/dF
       dGdFTensor    = zero                  ! initialize
 
@@ -655,7 +661,7 @@
           dGdF_kL(nIons+2,1)  = dGdFTensor(nIons+2,k,l)
 
           ! solution for each k,L component
-          dLocaldF_kL    = - matmul( inv(fjac), dGdF_kL )
+          dLocaldF_kL    = - matmul( fjacInv, dGdF_kL )
 
           ! split it into tensors: dCw/dF_kL, dCion_i/dF_kL, dPsi/dF_kL
           dCwdFTensor(k,l)            = dLocaldF_kL(1,1)
@@ -704,7 +710,7 @@
           dGdC_kL(nIons+2,1)  = dGdCTensor(nIons+2,k,l)
 
           ! solution for each k,L component
-          dLocaldC_kL    = - matmul( inv(fjac), dGdC_kL )
+          dLocaldC_kL    = - matmul( fjacInv, dGdC_kL )
 
           ! split it into appropriate tensors: dCw/dF_kL and dCion_i/dF_kL
           dCwdCTensor(k,l)            = dLocaldC_kL(1,1)
@@ -719,7 +725,7 @@
       dGdMu(2:nIons+2,1)  = zero
 
       ! (6.6) calculate dLocal/dMU
-      dLocaldMu  = - matmul( inv(fjac), dGdMu)
+      dLocaldMu  = - matmul( fjacInv, dGdMu)
 
       ! (6.7) split dLocal/dMu to dCw/dMu, dCion/dMu, dPsi/dMu
       dCwdMu              = dLocaldMu(1,1)
@@ -746,7 +752,7 @@
       do k = 1, nIons
         dGdOmg_k(1:nIons+2,1)  = dGdOmg(k,1:nIons+2)
 
-        dLocaldOmg_k          = - matmul( inv(fjac), dGdOmg_k )
+        dLocaldOmg_k          = - matmul( fjacInv, dGdOmg_k )
 
         dLocaldOmg(k,:)       = dLocaldOmg_k(:,1)
 
@@ -940,12 +946,12 @@
       globalPostVars(jelem,intPt,nStress+1:2*nStress)
      &                      = strainEuler(1:nStress,1)
 
-      globalPostVars(jElem,intPt,2*nStress+1)= phi_new
+      globalPostVars(jelem,intPt,2*nStress+1)= phi_new
 
-      globalPostVars(jElem,intPt,2*nStress+2:2*nStress+nIons+1)
+      globalPostVars(jelem,intPt,2*nStress+2:2*nStress+nIons+1)
      &                      = Cion_new(1:nIons)
 
-      globalPostVars(jElem,intPt,2*nStress+nIons+2) = psi_new
+      globalPostVars(jelem,intPt,2*nStress+nIons+2) = psi_new
 
       !!!!!!!!!!!!!!!!! END POST-PROCESSING SECTION !!!!!!!!!!!!!!!!!!!!
 
@@ -955,6 +961,9 @@
       contains
 
       subroutine electroChemicalState(x, fvec, fjac, vars)
+
+      ! this subroutine calculates the internal variables for the
+      ! electro-chemo-mechanical system: Cw, Cion(k), and psi
 
       ! list of independent variables:
       ! x(1)          = Cw              (Concentration of solvent)
@@ -976,13 +985,14 @@
       real(wp)          :: phi0, rho, Gshear, Kappa, pKa
       real(wp)          :: C0_fix, Vp, Zfix
       real(wp)          :: mu0, Vw, chi, Dw
-      real(wp)          :: Omg0(size(x)-2), Cion0(size(x)-2)
-      real(wp)          :: Vion(size(x)-2), Zion(size(x)-2)
-      real(wp)          :: Dion(size(x)-2)
-      real(wp)          :: trC, detF, mu, Omg(size(x)-2)
-      real(wp)          :: dPhidCw, dPressdCw, term1
+      real(wp)          :: trC, detF, mu
+      
+      real(wp), allocatable   :: Omg0(:), Cion0(:), Vion(:)
+      real(wp), allocatable   :: Zion(:), Dion(:), Omg(:)
 
       real(wp)          :: phi, lagrangeMult, press, CionTotal
+      real(wp)          :: dPhidCw, dPressdCw, term1
+
       integer           :: nIons, k, l
 
       type(logger)      :: msg
@@ -993,47 +1003,67 @@
 
       nIons     = size(x) - 2
 
-      Rgas      = vars(1)
-      Fcon      = vars(2)
-      theta     = vars(3)
-      phi0      = vars(4)
-      rho       = vars(5)
-      Gshear    = vars(6)
-      Kappa     = vars(7)
-      pKa       = vars(8)
-      C0_fix    = vars(9)
-      Vp        = vars(10)
-      Zfix      = vars(11)
-      mu0       = vars(12)
-      Vw        = vars(13)
-      chi       = vars(14)
-      Dw        = vars(15)
-
-      do k = 1, nIons
-        Cion0(k)  = vars( 16 + nIonProps*(k-1) )
-        Omg0(k)   = vars( 17 + nIonProps*(k-1) )
-        Vion(k)   = vars( 18 + nIonProps*(k-1) )
-        Zion(k)   = vars( 19 + nIonProps*(k-1) )
-        Dion(k)   = vars( 20 + nIonProps*(k-1) )
-      end do
-
-      RT  = Rgas*theta
-
-      !!!!!!!!!!!!!!!!!! END PROPERTIES AND CONSTANTS !!!!!!!!!!!!!!!!!!
+      if (nIons .lt. 2) then
+        call msg%ferror( flag=error, src='electroChemicalState',
+     &        msg='Total ions should be at least 2', ia=nIons)
+          call xit
+      end if
 
 
+      allocate( Omg0(nIons), Cion0(nIons), Vion(nIons), Zion(nIons), 
+     &          Dion(nIons), Omg(nIons) )
 
-      !!!!!!!!!!!!!!!!!!! CALCULATE INTERMEDIATE VARS !!!!!!!!!!!!!!!!!!
 
-      ! get the internal variables
-      trC   = vars( 21 + nIonProps*(nIons-1) )
-      detF  = vars( 22 + nIonProps*(nIons-1) )
-      mu    = vars( 23 + nIonProps*(nIons-1) )
+      if (present(vars)) then
 
-      do k = 1, nIons
-        Omg(k) = vars( 23 + nIonProps*(nIons-1) + k )
-      end do
+        if (size(vars) .lt.(23 + nIonProps*(nIons-1) + nIons)) then
+          call msg%ferror(flag=error, src='electroChemicalState',
+     &            msg='vars(:) is too small for number of ions')
+          call xit
+        end if
 
+        Rgas      = vars(1)
+        Fcon      = vars(2)
+        theta     = vars(3)
+        phi0      = vars(4)
+        rho       = vars(5)
+        Gshear    = vars(6)
+        Kappa     = vars(7)
+        pKa       = vars(8)
+        C0_fix    = vars(9)
+        Vp        = vars(10)
+        Zfix      = vars(11)
+        mu0       = vars(12)
+        Vw        = vars(13)
+        chi       = vars(14)
+        Dw        = vars(15)
+
+        do k = 1, nIons
+          Cion0(k)  = vars( 16 + nIonProps*(k-1) )
+          Omg0(k)   = vars( 17 + nIonProps*(k-1) )
+          Vion(k)   = vars( 18 + nIonProps*(k-1) )
+          Zion(k)   = vars( 19 + nIonProps*(k-1) )
+          Dion(k)   = vars( 20 + nIonProps*(k-1) )
+        end do
+
+        RT  = Rgas*theta
+
+
+        ! get the internal variables
+        trC   = vars( 21 + nIonProps*(nIons-1) )
+        detF  = vars( 22 + nIonProps*(nIons-1) )
+        mu    = vars( 23 + nIonProps*(nIons-1) )
+
+        do k = 1, nIons
+          Omg(k) = vars( 23 + nIonProps*(nIons-1) + k )
+        end do
+
+      else 
+        call msg%ferror( flag=error, src='electroChemicalState',
+     &            msg='physical variables are not available.')
+        call xit
+
+      end if
 
       ! calculate all the intermediate variables
       phi     = phi0/ ( phi0 + x(1)*Vw )
@@ -1046,7 +1076,15 @@
      &            - Kappa * ( log(detF*phi/phi0) )
 
 
-      !!!!!!!!!!!!!!!!! END CALCULATE INTERMEDIATE VARS !!!!!!!!!!!!!!!!
+      if ( abs(one-phi) < 1.0e-8_wp ) then
+        call msg%ferror( flag=error, src='electroChemicalState',
+     &            msg='phi is close to 1.0', ra=phi)
+        call xit
+      else if ( x(1) .lt. 1.0e-10_wp ) then
+        call msg%ferror( flag=error, src='electroChemicalState',
+     &            msg='Cw is close to 0.0', ra=x(1))
+        call xit
+      end if
 
 
 
@@ -1101,11 +1139,17 @@
 
         dPhidCw   = - (phi**two/phi0) * Vw
 
+        dPressdCw = (phi**two/phi0) * Vw * 
+     &        ( 
+     &          ( Gshear/(three*phi0) ) *
+     &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi 
+     &        )
+
         ! first element (1,1): dG1/dCw
         fjac(1,1) = dPhidCw  *
      &            (
      &                RT*(one - one/(one-phi) + two*chi*phi)
-     &              + Kappa*Vw/phi*( log(detF*phi/phi0) - one)
+     &              + (Kappa/phi)*( log(detF*phi/phi0) - one)*Vw
      &            )
      &              + (RT/x(1)**two) * CionTotal
 
@@ -1117,11 +1161,6 @@
         ! last element of the first row (1,nIons+2) => (dG1/dpsi = 0)
         fjac(1,nIons+2)   = zero
 
-        dPressdCw = (phi**two/phi0) * Vw * 
-     &        ( 
-     &          ( Gshear/(three*phi0) ) *
-     &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi 
-     &        )
 
         ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
         do k = 1, nIons
@@ -1707,7 +1746,8 @@
 
 
         ! call material point subroutine for the polyelectrolyte gel
-        call neohookean_flory2(kstep,kinc,time,dtime,nDim,analysis,
+        if (matID .eq. 1) then
+          call neohookean_flory2(kstep,kinc,time,dtime,nDim,analysis,
      &          nStress,nNode,jelem,intpt,coord_ip,props,nprops,
      &          jprops,njprops,nIons,matID,Fbar,mu,dMudX,Omg,dOmgdX,
      &          svars,nsvars,statev,nstatev,
@@ -1717,6 +1757,11 @@
      &          FSTensorUM,dCwdFTensor,dJwdFTensor,dCwdMu,dJwdMu,MmatW,
      &          FSTensorUI,dCiondFTensor,dJiondFTensor,dCiondMu,dJidOmg,
      &          MmatII,MmatWI,MmatIW,dCwdOmg,dCiondOmg,dJwdOmg,dJidMu)
+        else 
+          call msg%ferror(flag=error, src='pegel_general',
+     &            msg='Material model is not available: ', ia=matID)
+          call xit
+        end if
 
         !!!!!!!!!!!!!!! END CONSTITUTIVE CALCULATION !!!!!!!!!!!!!!!!!!
 
@@ -2618,7 +2663,8 @@
         
 
         ! call material point subroutine for the polyelectrolyte gel
-        call neohookean_flory2(kstep,kinc,time,dtime,nDim,analysis,
+        if (matID .eq. 1) then
+          call neohookean_flory2(kstep,kinc,time,dtime,nDim,analysis,
      &          nStress,nNode,jelem,intpt,coord_ip,props,nprops,
      &          jprops,njprops,nIons,matID,Fbar,mu,dMudX,Omg,dOmgdX,
      &          svars,nsvars,statev,nstatev,
@@ -2628,6 +2674,11 @@
      &          FSTensorUM,dCwdFTensor,dJwdFTensor,dCwdMu,dJwdMu,MmatW,
      &          FSTensorUI,dCiondFTensor,dJiondFTensor,dCiondMu,dJidOmg,
      &          MmatII,MmatWI,MmatIW,dCwdOmg,dCiondOmg,dJwdOmg,dJidMu)
+        else 
+          call msg%ferror(flag=error, src='pegel_axisymmetric',
+     &          msg='Material model is not available: ', ia=matID)
+          call xit
+        end if
 
         !!!!!!!!!!!!!!! END CONSTITUTIVE CALCULATION !!!!!!!!!!!!!!!!!!
 
@@ -3145,6 +3196,12 @@
       iNDOFEL   = nDOFEL - uDOFEL - mDOFEL
 
       nIons     = iNDOFEL/nNode       ! no of ions in the model
+
+      if (nIons .lt. 2) then
+        call msg%ferror(flag=error, src='uel', 
+     &         msg='There should be MINIMUM of 2 ions', ia=nIons)
+        call xit
+      end if
 
       nInt      = jprops(1)           ! # int pt for vector element
       matID     = jprops(3)           ! # material constitutive model
