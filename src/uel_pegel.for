@@ -236,33 +236,32 @@
       real(wp), intent(inout), optional   :: statev(nstatev)    ! local state vars/ int pt
       real(wp), intent(inout), optional   :: svars(nsvars)      ! state vars / element (abaqus)
 
-      ! local variables (kinematic quantities)
+      ! local variables
       real(wp)          :: detF, Finv(3,3), FInvT(3,3)
       real(wp)          :: C(3,3), Cinv(3,3), trC
       real(wp)          :: B(3,3), Binv(3,3)
       real(wp)          :: strainTensorEuler(3,3)
       real(wp)          :: strainTensorLagrange(3,3)
-
+      
       ! local variables (internal variables)
       logical           :: intVarsFlag
       real(wp)          :: phi_old, Cw_old, Cion_old(nIons), psi_old
       real(wp)          :: phi_new, Cw_new, Cion_new(nIons), psi_new
-      real(wp)          :: CionTotal, chargeTotal
       real(wp)          :: vars(nProps+3+nIons)
       real(wp)          :: rootsOld(nIons+2), roots(nIons+2)
-      real(wp)          :: detFe, detFs
-      real(wp)          :: del_phi, phi_lmt
 
-      ! local variables (stress tensors)
+      ! local variables
+      real(wp)          :: CionTotal, chargeTotal
+      real(wp)          :: detFe, detFs
       real(wp)          :: stressTensorPK1(3,3)
       real(wp)          :: stressTensorCauchy(3,3)
-
+      real(wp)          :: press
 
       ! local tangent tensors and related quantities
       real(wp)          :: dPhidCw, dCwdPhi
+      real(wp)          :: fvec(nIons+2)
       real(wp)          :: fjac(nIons+2,nIons+2)
       real(wp)          :: fjacInv(nIons+2,nIons+2)
-      real(wp)          :: dPressdCw, term1, press
       real(wp)          :: dGdFTensor(nIons+2,3,3)
       real(wp)          :: dGdCTensor(nIons+2,3,3)
       real(wp)          :: dGdF_kL(nIons+2,1)
@@ -321,6 +320,8 @@
 
 
       ! initialize matrial stiffness tensors
+      fvec            = zero
+      fjac            = zero
       CTensor         = zero
       dJwdFTensor     = zero
       dJiondFTensor   = zero
@@ -486,7 +487,7 @@
 
       !!!!!!!!!!!!!!!!!! ELEMENT RESIDUAL QUANTITITES !!!!!!!!!!!!!!!!!!
 
-      ! (1) stress tensors
+      ! (1.1) stress tensors
       stressTensorPK2     = Gshear * (ID3 - (phi0)**(two/three) * CInv)
      &                      + Kappa * phi0 * detFs * log(detFe) * CInv
 
@@ -495,9 +496,14 @@
      &                    + Kappa * phi0 * detFs * log(detFe) * ID3 )
 
 
-      ! (2) time derivatives of internal variables
+      ! (1.2) calculate the mean pressure, p = -(detFe/3)*trace(sigma)      
+      press = -(detFe/three) * trace(stressTensorCauchy)
+
+
+      ! (2.1) time derivative solvent concentration
       dCwdt     = (Cw_new-Cw_old)/dtime
 
+      ! (2.2) time derivative of ion concentration
       do k = 1, nIons
         dCiondt(k)   = ( Cion_new(k) - Cion_old(k) )/dtime
       end do
@@ -534,94 +540,14 @@
 
       !!!!!!!!!!!!!!!!!!! ELEMENT TANGENT QUANTITITES !!!!!!!!!!!!!!!!!!
 
-      ! first we compute all the derivatives of the internal variables
-      ! (Cw, Cion) w.r.t the degrees of freedom (F, C, mu, omega, etc.)
-      ! these quantities will be used in calculating the material tangents
+      ! (4) calculate jacobian of the local residuals using converged roots
+      call electroChemicalState(roots, fvec, fjac, vars)
 
-
-      ! (4) calculate dCw/dPhi and dPhi/dCw
-      dPhidCw   = - (phi_new**two/phi0) * Vw
-      dCwdPhi   = one/dPhidCw
-
-      ! calculate the repetitive large terms
-      press   = (Gshear*phi_new)/(three*phi0)
-     &            * ( three * phi0**(two/three) - trC )
-     &            - Kappa * ( log(detF*phi_new/phi0) )
-
-      dPressdCw = (phi_new**two/phi0) * Vw * 
-     &        ( 
-     &          ( Gshear/(three*phi0) ) *
-     &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi_new 
-     &        )
-
-
-
-
-      ! (5) form the jacobian matrix of the local residuals
-      fjac  = zero          ! initialize
-
-      !! first row
-      ! first element (1,1): dG1/dCw
-      fjac(1,1)   = dPhidCw *
-     &            (
-     &              RT * (one - one/(one-phi_new) + two*chi*phi_new)
-     &            - Kappa*Vw/phi_new
-     &            + (Kappa*Vw/phi_new) *log(detF*phi_new/phi0)
-     &            )
-     &            + (RT/Cw_new**two) * CionTotal
-
-
-      ! rest of the row (1,2:nIons+1) => (dG_1/dCion_k)
-      do k = 1, nIons
-        fjac(1,k+1)     = - RT/Cw_new
-      end do
-
-      ! last element of the first row (1,nIons+2) => (dG1/dpsi = 0)
-      fjac(1,nIons+2)   = zero
-
-
-      ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
-      do k = 1, nIons
-        term1             = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
-     &                      - press*Vion(k) - Omg0(k) ) /RT )
-
-        fjac(k+1,1)       = - RT/Cw_new +  dPressdCw * Vion(k)
-
-        fjac(k+1,k+1)     = RT/Cion_new(k)
-
-        fjac(k+1,nIons+2) = Fcon*Zion(k)
-      end do
-
-      !! last row
-      ! first element of last row of the jacobian (nIons+2,1) => dG_n+2/dCw
-      do k = 1, nIons
-        term1   = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
-     &                  - press*Vion(k) - Omg0(k) ) /RT )
-
-        fjac(nIons+2,1) = fjac(nIons+2,1) +
-     &          Zion(k) * term1 *
-     &          ( one - (Cw_new/RT) * dPressdCw * Vion(k) )
-      end do
-
-      ! all the middle columns (nIons+2,2:nIons+1) => dG_n+2/dCion_k = 0
-      fjac(nIons+2,2:nIons+1)     = zero
-
-
-      ! last term of the last row (nIons+2,nIons+2)
-      do k = 1, nIons
-        term1   = exp( ( Omg(k) - Fcon*Zion(k)*psi_new
-     &                  - press*Vion(k) - Omg0(k) ) /RT )
-
-        fjac(nIons+2,nIons+2) = fjac(nIons+2,nIons+2)
-     &            - ( Fcon*Cw_new/RT ) * Zion(k)**two * term1
-      end do
-
-
-      ! invert the fjac matrix
+      ! invert the fjac matrix for repetitive use later
       fjacInv   = inv(fjac)
 
 
-      !! (6.1) calculate dG/dF
+      !! (5.1) calculate dG/dF
       dGdFTensor    = zero                  ! initialize
 
       ! first component: dG1/dF
@@ -647,7 +573,7 @@
 
 
 
-      ! (6.2) dCw/dF_kL, dCion_i/dF_kL
+      ! (5.2) dCw/dF_kL, dCion_i/dF_kL
       do k = 1,3
         do l = 1,3
 
@@ -672,7 +598,7 @@
 
 
 
-      ! (6.3) form dG/dC
+      ! (5.3) form dG/dC
       dGdCTensor            = zero
       ! first component: dG1/dC
       dGdCTensor(1,:,:)     = kappa*Vw/two *( log(detFe) - one ) * CInv
@@ -696,7 +622,7 @@
       end do
 
 
-      ! (6.4) calculate dLocal/dC
+      ! (5.4) calculate dLocal/dC
       do k = 1,3
         do l = 1,3
 
@@ -720,21 +646,21 @@
       end do
 
 
-      ! (6.5) form the RHS dG/dMu vector
+      ! (5.5) form the RHS dG/dMu vector
       dGdMu(1,1)          = - one
       dGdMu(2:nIons+2,1)  = zero
 
-      ! (6.6) calculate dLocal/dMU
+      ! (5.6) calculate dLocal/dMU
       dLocaldMu  = - matmul( fjacInv, dGdMu)
 
-      ! (6.7) split dLocal/dMu to dCw/dMu, dCion/dMu, dPsi/dMu
+      ! (5.7) split dLocal/dMu to dCw/dMu, dCion/dMu, dPsi/dMu
       dCwdMu              = dLocaldMu(1,1)
       dCiondMu(1:nIons)   = dLocaldMu(2:nIons+1,1)
       dPsidMu             = dLocaldMu(nIons+2,1)
 
 
 
-      ! (6.8) form the dG_i/dOmg_j vector (nIons copies)
+      ! (5.8) form the dG_i/dOmg_j vector (nIons copies)
       dGdOmg = zero             ! initialize
       do k = 1, nIons
         dGdOmg(k,1)       = zero
@@ -745,12 +671,12 @@
       end do
 
 
-      ! (6.9) calculate dLocal/dOmg_i and
+      ! (5.9) calculate dLocal/dOmg_i and
       ! then split it to dCw/dOmg_i, dCion_i/dOmg_j
       ! dCiondOmg(i,j) represents dCion_j/dOmg_i
       ! i.e. omega varies row wise Cion varies column wise and
       do k = 1, nIons
-        dGdOmg_k(1:nIons+2,1)  = dGdOmg(k,1:nIons+2)
+        dGdOmg_k(1:nIons+2,1) = dGdOmg(k,1:nIons+2)
 
         dLocaldOmg_k          = - matmul( fjacInv, dGdOmg_k )
 
@@ -764,11 +690,11 @@
 
 
 
-      ! (7) calculate dS/dCw (a symmetric second order tensor)
+      ! (6) calculate dS/dCw (a symmetric second order tensor)
       dSdCwTensor =  Kappa * Vw * ( log(detFe) - one ) * CInv
 
 
-      ! (8) calculate material tangent (CTensor = 2*dS/dC)
+      ! (7) calculate material tangent (CTensor = 2*dS/dC)
       if (analysis .eq. 'AX') then
 
         ! for axisymmetry we are defining dP/dF and then calculating
@@ -833,33 +759,33 @@
       end if
 
 
-      ! (9.1) calculate dSdMuTensor
+      ! (8.1) calculate dSdMuTensor
       dSdMuTensor =  dSdCwTensor * dCwdMu
 
-      ! (9.2) calculate FSTensorUM
+      ! (8.2) calculate FSTensorUM
       FSTensorUM  = matmul(F,dSdMuTensor)
 
 
 
-      ! (10.1) calculate dSdOmgTensor
+      ! (9.1) calculate dSdOmgTensor
       do k = 1, nIons
         dSdOmgTensor(k,:,:) =  dSdCwTensor * dCwdOmg(k)
       end do
 
 
-      ! (10.2) calculate FSTensorUI
+      ! (9.2) calculate FSTensorUI
       FSTensorUI  = zero
       do k = 1, nIons
         FSTensorUI(k,:,:) = matmul( F,dSdOmgTensor(k,:,:) )
       end do
 
 
-      ! (11.1) Jw tensor = dJw/dF (FIX)
+      ! (10.1) Jw tensor = dJw/dF (FIX)
       dJwdFTensor = zero
       do i = 1, nDim
         do k = 1, 3
           do l = 1, 3
-            do j = 1, nDim               ! summation over dummy index j
+            do j = 1, nDim                ! summation over dummy index j
               dJwdFTensor(i,k,l) = dJwdFTensor(i,k,l)
      &            + (Dw*Cw_new)/RT
      &            * ( FInv(i,k)*CInv(l,j) ) * dMudX(j,1)
@@ -871,11 +797,11 @@
 
 
 
-      ! (11.2) calculate dJw/dMu
+      ! (10.2) calculate dJw/dMu
       dJwdMu  = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX) * dCwdMu
 
 
-      ! (11.3) calculate dJwd/Omg
+      ! (10.3) calculate dJwd/Omg
       do k = 1, nIons
         dJwdOmg(k,:,:) = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX)
      &                    * dCwdOmg(k)
@@ -883,7 +809,7 @@
 
 
 
-      ! (12.1) Jion tensor = dJion/dF (FIX)
+      ! (11.1) Jion tensor = dJion/dF (FIX)
       dJiondFTensor   = zero
       do n = 1,nIons
         do i = 1, nDim
@@ -902,18 +828,18 @@
       end do
 
 
-      ! (12.3) calculate dJiondMu
+      ! (11.2) calculate dJiondMu
       dJidMu     = zero
       do k = 1, nIons
         dJidMu(k,:,:) = - (Dion(k)/RT) *
      &        matmul( CInv(1:nDim,1:nDim),dOmgdX(k,:,:) ) * dCiondMu(k)
       end do
 
-      ! (12.4) calculate dJiondOmg
+      ! (11.3) calculate dJiondOmg
       dJidOmg     = zero
       do k = 1, nIons
         dJidOmg(k,k,:,:) = - (Dion(k)/RT) *
-     &        matmul(CInv(1:nDim,1:nDim),dOmgdX(k,:,:))*dCiondOmg(k,k)
+     &        matmul(CInv(1:nDim,1:nDim),dOmgdX(k,:,:)) * dCiondOmg(k,k)
       end do
 
       !!!!!!!!!!!!!!!!! END ELEMENT TANGENT QUANTITITES !!!!!!!!!!!!!!!!
@@ -981,22 +907,24 @@
       real(wp), intent(in), optional    :: vars(:)
 
 
-      real(wp)          :: Rgas, Fcon, theta, RT
-      real(wp)          :: phi0, rho, Gshear, Kappa, pKa
-      real(wp)          :: C0_fix, Vp, Zfix
-      real(wp)          :: mu0, Vw, chi, Dw
-      real(wp)          :: trC, detF, mu
-      
+      real(wp)                :: Rgas, Fcon, theta, RT
+      real(wp)                :: phi0, rho, Gshear, Kappa, pKa
+      real(wp)                :: C0_fix, Vp, Zfix
+      real(wp)                :: mu0, Vw, chi, Dw      
       real(wp), allocatable   :: Omg0(:), Cion0(:), Vion(:)
       real(wp), allocatable   :: Zion(:), Dion(:), Omg(:)
 
-      real(wp)          :: phi, lagrangeMult, press, CionTotal
-      real(wp)          :: dPhidCw, dPressdCw, term1
+      real(wp)                :: trC, detF, mu
+      real(wp)                :: phi, detFs, detFe
+      real(wp)                :: lagrangeMult, press, CionTotal
+      real(wp)                :: dPhidCw, dPressdCw, boltzmannFac
 
-      integer           :: nIons, k, l
+      real(wp)                :: Cw, psi
+      real(wp), allocatable   :: Cion(:)
 
-      type(logger)      :: msg
-      integer, parameter:: nIonProps = 5
+      integer                 :: nIons, k, l
+      type(logger)            :: msg
+      integer, parameter      :: nIonProps = 5
 
 
       !!!!!!!!!!!!!!!!! BEGIN PROPERTIES AND CONSTANTS !!!!!!!!!!!!!!!!!
@@ -1011,10 +939,10 @@
 
 
       allocate( Omg0(nIons), Cion0(nIons), Vion(nIons), Zion(nIons), 
-     &          Dion(nIons), Omg(nIons) )
+     &          Dion(nIons), Omg(nIons), Cion(nIons) )
 
 
-      if (present(vars)) then
+      if ( present(vars) ) then
 
         if (size(vars) .lt.(23 + nIonProps*(nIons-1) + nIons)) then
           call msg%ferror(flag=error, src='electroChemicalState',
@@ -1065,24 +993,30 @@
 
       end if
 
+      ! assign named variables to the unknown roots 
+      Cw      = x(1)
+      Cion    = x(2:nIons+1)
+      psi     = x(nIons+2)
+
       ! calculate all the intermediate variables
-      phi     = phi0/ ( phi0 + x(1)*Vw )
+      phi     = phi0/ ( phi0 + Cw*Vw )
+      detFs   = one/phi
+      detFe   = detF/(phi0*detFs)
 
-      lagrangeMult  = Kappa/two * ( log(detF*phi/phi0) )**two
-     &                - Kappa * ( log(detF*phi/phi0) )
+      lagrangeMult  = (Kappa/two)*(log(detFe))**two - Kappa*log(detFe)
 
-      press   = (Gshear*phi)/(three*phi0)
-     &            * ( three * phi0**(two/three) - trC )
-     &            - Kappa * ( log(detF*phi/phi0) )
+      press   = - (Gshear)/(three*phi0*detFs)
+     &            * ( trC - three * phi0**(two/three) )
+     &            - Kappa * ( log(detFe) )
 
 
       if ( abs(one-phi) < 1.0e-8_wp ) then
         call msg%ferror( flag=error, src='electroChemicalState',
      &            msg='phi is close to 1.0', ra=phi)
         call xit
-      else if ( x(1) .lt. 1.0e-10_wp ) then
+      else if ( Cw .lt. 1.0e-10_wp ) then
         call msg%ferror( flag=error, src='electroChemicalState',
-     &            msg='Cw is close to 0.0', ra=x(1))
+     &            msg='Cw is close to 0.0', ra=Cw)
         call xit
       end if
 
@@ -1098,14 +1032,14 @@
 
       ! contribution from ions
       do k = 1, nIons
-        fvec(1) = fvec(1) - RT * x(k+1)/x(1)
+        fvec(1) = fvec(1) - RT * Cion(k)/Cw
       end do
 
 
       ! (2-n+1) constititutive equation for each ion (omega)
       do k = 1, nIons
-        fvec(k+1) = Omg0(k) + RT*log( x(k+1)/x(1) )
-     &            + Fcon * Zion(k) * x(nIons+2)
+        fvec(k+1) = Omg0(k) + RT*log( Cion(k)/Cw )
+     &            + Fcon * Zion(k) * psi
      &            + press * Vion(k) - Omg(k)
         end do
 
@@ -1115,9 +1049,9 @@
 
       do k = 1, nIons
         fvec(nIons+2) = fvec(nIons+2) +
-     &     x(1) * Zion(k) * exp
+     &     Cw * Zion(k) * exp
      &      (
-     &       (Omg(k)-Fcon*Zion(k)*x(nIons+2)-press*Vion(k)-Omg0(k))/RT
+     &       (Omg(k)-Fcon*Zion(k)*psi-press*Vion(k)-Omg0(k))/RT
      &      )
       end do
 
@@ -1132,14 +1066,11 @@
         fjac  = zero          ! initialize
 
         ! total ion concentration
-        CionTotal = zero
-        do k = 1, nIons
-          CionTotal = CionTotal + x(k+1)
-        end do
+        CionTotal = sum(Cion)
 
         dPhidCw   = - (phi**two/phi0) * Vw
 
-        dPressdCw = (phi**two/phi0) * Vw * 
+        dPressdCw = - dPhidCw *
      &        ( 
      &          ( Gshear/(three*phi0) ) *
      &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi 
@@ -1149,13 +1080,13 @@
         fjac(1,1) = dPhidCw  *
      &            (
      &                RT*(one - one/(one-phi) + two*chi*phi)
-     &              + (Kappa/phi)*( log(detF*phi/phi0) - one)*Vw
+     &              + (Kappa/phi)*( log(detFe) - one) * Vw
      &            )
-     &              + (RT/x(1)**two) * CionTotal
+     &              + (RT/Cw**two) * CionTotal
 
         ! rest of the row (1,2:nIons+1) => (dG_1/dCion_k)
         do k = 1, nIons
-          fjac(1,k+1)     = - RT/x(1)
+          fjac(1,k+1)     = - RT/Cw
         end do
 
         ! last element of the first row (1,nIons+2) => (dG1/dpsi = 0)
@@ -1165,12 +1096,12 @@
         ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
         do k = 1, nIons
 
-          term1             = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
+          boltzmannFac      = exp( ( Omg(k) - Fcon*Zion(k)*psi
      &                        - press*Vion(k) - Omg0(k) ) /RT )
 
-          fjac(k+1,1)       = - RT/x(1) + dPressdCw * Vion(k) 
+          fjac(k+1,1)       = - RT/Cw + dPressdCw * Vion(k) 
 
-          fjac(k+1,k+1)     = RT/x(k+1)
+          fjac(k+1,k+1)     = RT/Cion(k)
 
           fjac(k+1,nIons+2) = Fcon*Zion(k)
 
@@ -1180,12 +1111,12 @@
         ! first element of last row of the jacobian (nIons+2,1) => dG_n+2/dCw
         do k = 1, nIons
 
-          term1   = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
-     &                  - press*Vion(k) - Omg0(k) ) /RT )
+          boltzmannFac    = exp( ( Omg(k) - Fcon*Zion(k)*psi
+     &                            - press*Vion(k) - Omg0(k) ) /RT )
 
           fjac(nIons+2,1) = fjac(nIons+2,1) +
-     &          Zion(k) * term1 *
-     &          ( one - ( x(1)/RT ) *  dPressdCw * Vion(k) )
+     &          Zion(k) * boltzmannFac *
+     &            ( one - ( Cw/RT ) *  dPressdCw * Vion(k) )
 
         end do
 
@@ -1195,11 +1126,11 @@
         ! last term of the last row (nIons+2,nIons+2)
         do k = 1, nIons
 
-          term1   = exp( ( Omg(k) - Fcon*Zion(k)*x(nIons+2)
-     &                  - press*Vion(k) - Omg0(k) ) /RT )
+          boltzmannFac   = exp( ( Omg(k) - Fcon*Zion(k)*psi
+     &                            - press*Vion(k) - Omg0(k) ) /RT )
 
           fjac(nIons+2,nIons+2) = fjac(nIons+2,nIons+2)
-     &            - ( Fcon*x(1)/RT ) * Zion(k)**two * term1
+     &            - ( Fcon*Cw/RT ) * Zion(k)**two * boltzmannFac
 
         end do
 
