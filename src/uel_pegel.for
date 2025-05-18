@@ -464,10 +464,7 @@
       detFe             = detF/(phi0*detFs)
 
       ! total ion concentration
-      CionTotal     = zero
-      do k = 1, nIons
-        CionTotal   = CionTotal + Cion_new(k)
-      end do
+      CionTotal         = sum(Cion_new)
 
       ! internal variables are: phi_new, Cion_new(nIons), psi_new
       ! there are "nstatev" state variables per integration point
@@ -540,10 +537,10 @@
 
       !!!!!!!!!!!!!!!!!!! ELEMENT TANGENT QUANTITITES !!!!!!!!!!!!!!!!!!
 
-      ! (4) calculate jacobian of the local residuals using converged roots
+      ! (4.1) calculate jacobian of the local residuals using converged roots
       call electroChemicalState(roots, fvec, fjac, vars)
 
-      ! invert the fjac matrix for repetitive use later
+      ! (4.2) invert the fjac matrix for repetitive use later
       fjacInv   = inv(fjac)
 
 
@@ -759,7 +756,7 @@
       end if
 
 
-      ! (8.1) calculate dSdMuTensor
+      ! (8.1) calculate dS/dMu ensor
       dSdMuTensor =  dSdCwTensor * dCwdMu
 
       ! (8.2) calculate FSTensorUM
@@ -767,7 +764,7 @@
 
 
 
-      ! (9.1) calculate dSdOmgTensor
+      ! (9.1) calculate dS/dOmg  tensor
       do k = 1, nIons
         dSdOmgTensor(k,:,:) =  dSdCwTensor * dCwdOmg(k)
       end do
@@ -797,11 +794,11 @@
 
 
 
-      ! (10.2) calculate dJw/dMu
+      ! (10.2) calculate dJw/dMu vector
       dJwdMu  = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX) * dCwdMu
 
 
-      ! (10.3) calculate dJwd/Omg
+      ! (10.3) calculate dJwd/Omg 
       do k = 1, nIons
         dJwdOmg(k,:,:) = - (Dw/RT) * matmul(CInv(1:nDim,1:nDim),dMudX)
      &                    * dCwdOmg(k)
@@ -809,7 +806,7 @@
 
 
 
-      ! (11.1) Jion tensor = dJion/dF (FIX)
+      ! (11.1) Jion tensor = dJion/dF
       dJiondFTensor   = zero
       do n = 1,nIons
         do i = 1, nDim
@@ -828,14 +825,14 @@
       end do
 
 
-      ! (11.2) calculate dJiondMu
+      ! (11.2) calculate dJion/dMu
       dJidMu     = zero
       do k = 1, nIons
         dJidMu(k,:,:) = - (Dion(k)/RT) *
      &        matmul( CInv(1:nDim,1:nDim),dOmgdX(k,:,:) ) * dCiondMu(k)
       end do
 
-      ! (11.3) calculate dJiondOmg
+      ! (11.3) calculate dJion/dOmg
       dJidOmg     = zero
       do k = 1, nIons
         dJidOmg(k,k,:,:) = - (Dion(k)/RT) *
@@ -998,6 +995,9 @@
       Cion    = x(2:nIons+1)
       psi     = x(nIons+2)
 
+      ! total ion concentration
+      CionTotal = sum(Cion)
+
       ! calculate all the intermediate variables
       phi     = phi0/ ( phi0 + Cw*Vw )
       detFs   = one/phi
@@ -1065,9 +1065,6 @@
 
         fjac  = zero          ! initialize
 
-        ! total ion concentration
-        CionTotal = sum(Cion)
-
         dPhidCw   = - (phi**two/phi0) * Vw
 
         dPressdCw = - dPhidCw *
@@ -1095,9 +1092,6 @@
 
         ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
         do k = 1, nIons
-
-          boltzmannFac      = exp( ( Omg(k) - Fcon*Zion(k)*psi
-     &                        - press*Vion(k) - Omg0(k) ) /RT )
 
           fjac(k+1,1)       = - RT/Cw + dPressdCw * Vion(k) 
 
