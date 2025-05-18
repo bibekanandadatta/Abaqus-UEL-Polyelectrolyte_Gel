@@ -246,7 +246,7 @@
       ! local variables (internal variables)
       logical           :: intVarsFlag
       real(wp)          :: phi_old, Cw_old, Cion_old(nIons), psi_old
-      real(wp)          :: phi_new, Cw_new, Cion_new(nIons), psi_new
+      real(wp)          :: phi, Cw, Cion(nIons), psi
       real(wp)          :: vars(nProps+3+nIons)
       real(wp)          :: rootsOld(nIons+2), roots(nIons+2)
 
@@ -255,13 +255,14 @@
       real(wp)          :: detFe, detFs
       real(wp)          :: stressTensorPK1(3,3)
       real(wp)          :: stressTensorCauchy(3,3)
-      real(wp)          :: press
+      real(wp)          :: pressure
 
       ! local tangent tensors and related quantities
       real(wp)          :: dPhidCw, dCwdPhi
       real(wp)          :: fvec(nIons+2)
       real(wp)          :: fjac(nIons+2,nIons+2)
       real(wp)          :: fjacInv(nIons+2,nIons+2)
+      real(wp)          :: boltzmannFac(nIons)
       real(wp)          :: dGdFTensor(nIons+2,3,3)
       real(wp)          :: dGdCTensor(nIons+2,3,3)
       real(wp)          :: dGdF_kL(nIons+2,1)
@@ -286,6 +287,7 @@
       real(wp)          :: dPsidOmg(nIons)
 
       real(wp)          :: dSdCwTensor(3,3)
+      real(wp)          :: dPdCwTensor(3,3)
       real(wp)          :: dSdMuTensor(3,3)
       real(wp)          :: dSdOmgTensor(nIons,3,3)
 
@@ -454,27 +456,27 @@
       end if
 
       ! retrieve all the solutions for further usage
-      Cw_new            = roots(1)
-      Cion_new(1:nIons) = roots(2:nIons+1)
-      psi_new           = roots(nIons+2)
+      Cw            = roots(1)
+      Cion(1:nIons) = roots(2:nIons+1)
+      psi           = roots(nIons+2)
 
-      phi_new           = phi0/(phi0 + Cw_new*Vw)
+      phi           = phi0/(phi0 + Cw*Vw)
 
-      detFs             = one/phi_new
-      detFe             = detF/(phi0*detFs)
+      detFs         = one/phi
+      detFe         = detF/(phi0*detFs)
 
       ! total ion concentration
-      CionTotal         = sum(Cion_new)
+      CionTotal         = sum(Cion)
 
-      ! internal variables are: phi_new, Cion_new(nIons), psi_new
+      ! internal variables are: phi, Cion(nIons), psi
       ! there are "nstatev" state variables per integration point
-      svars( (intPt-1)*nstatev + 1 )        = phi_new
+      svars( (intPt-1)*nstatev + 1 )        = phi
 
       do k = 1, nIons
-        svars( (intPt-1)*nstatev + k+1 )    = Cion_new(k)
+        svars( (intPt-1)*nstatev + k+1 )    = Cion(k)
       end do
 
-      svars( (intPt-1)*nstatev + nIons+2 )  = psi_new
+      svars( (intPt-1)*nstatev + nIons+2 )  = psi
 
       !!!!!!!!!!!! END SOLVE AND UPDATE INERNAL VARIABLES !!!!!!!!!!!!!!
 
@@ -493,21 +495,21 @@
      &                    + Kappa * phi0 * detFs * log(detFe) * ID3 )
 
 
-      ! (1.2) calculate the mean pressure, p = -(detFe/3)*trace(sigma)      
-      press = -(detFe/three) * trace(stressTensorCauchy)
+      ! (1.2) calculate the mean pressure, p = -(Je/3)*trace(sigma)      
+      pressure  = -(detFe/three) * trace(stressTensorCauchy)
 
 
       ! (2.1) time derivative solvent concentration
-      dCwdt     = (Cw_new-Cw_old)/dtime
+      dCwdt     = (Cw - Cw_old)/dtime
 
       ! (2.2) time derivative of ion concentration
       do k = 1, nIons
-        dCiondt(k)   = ( Cion_new(k) - Cion_old(k) )/dtime
+        dCiondt(k)   = ( Cion(k) - Cion_old(k) )/dtime
       end do
 
 
       ! (3.1) calculate solvent mobility matrix : Mw = Dw*Cw/RT*Inv(C)
-      MmatW     = (Dw*Cw_new/RT)*CInv(1:nDim,1:nDim)
+      MmatW     = (Dw*Cw/RT)*CInv(1:nDim,1:nDim)
 
       ! (3.2) calculate the solvent molar flux: Jw = - Mw*Grad(mu)
       Jw        = - matmul(MmatW,dMudX)
@@ -522,7 +524,7 @@
       MmatII    = zero
 
       do k = 1, nIons
-        MmatII(k,k,:,:) = (Dion(k)*Cion_new(k)/RT)*Cinv(1:nDim,1:nDim)
+        MmatII(k,k,:,:) = (Dion(k)*Cion(k)/RT)*Cinv(1:nDim,1:nDim)
       end do
 
       ! (3.5) calculate the solute molar flux: Ji = - Mion*Grad(Omg)
@@ -544,6 +546,14 @@
       fjacInv   = inv(fjac)
 
 
+      ! (5.0) calculate boltzmann factor to be used later
+      boltzmannFac = zero 
+
+      do k = 1, nIons
+        boltzmannFac(k)   = exp( ( Omg(k) - Fcon*Zion(k)*psi
+     &                            - pressure*Vion(k) - Omg0(k) ) /RT )
+      end do
+
       !! (5.1) calculate dG/dF
       dGdFTensor    = zero                  ! initialize
 
@@ -552,7 +562,7 @@
 
       ! all the middle components: dG_k/dF
       do k = 1, nIons
-        dGdFTensor(k+1,:,:) = - ( two*Gshear*phi_new/(three*phi0) * F
+        dGdFTensor(k+1,:,:) = - ( two*Gshear/(three*phi0*detFs) * F
      &                            + kappa * FInvT ) * Vion(k)
       end do
 
@@ -560,12 +570,9 @@
       dGdFTensor(nIons+2,:,:)   = zero
       do k = 1, nIons
         dGdFTensor(nIons+2,:,:) = dGdFTensor(nIons+2,:,:)
-     &      + Cw_new/RT
-     &      * ( two*Gshear*phi_new/(three*phi0) * F + kappa * FInvT )
-     &      * Zion(k) * Vion(k)
-     &      * exp(
-     &         (Omg(k) - Fcon*psi_new*Zion(k) - press*Vion(k) - Omg0(k))
-     &         / RT )
+     &      + (Cw/RT)
+     &      * ( two*Gshear/(three*phi0*detFs) * F + kappa * FInvT )
+     &      * Zion(k) * Vion(k) * boltzmannFac(k)
       end do
 
 
@@ -602,7 +609,7 @@
 
       ! middle components: dG_k/dC
       do k = 1, nIons
-        dGdCTensor(k+1,:,:) = - ( Gshear*phi_new/(three*phi0) * ID3
+        dGdCTensor(k+1,:,:) = - ( Gshear/(three*phi0*detFs) * ID3
      &                            + kappa/two * CInv ) * Vion(k)
       end do
 
@@ -610,12 +617,9 @@
       dGdCTensor(nIons+2,:,:)   = zero
       do k = 1, nIons
         dGdCTensor(nIons+2,:,:) = dGdCTensor(nIons+2,:,:) 
-     &      + Cw_new/RT 
-     &      * ( Gshear*phi_new/(three*phi0) * ID3 + kappa/two * CInv )
-     &      * Zion(k) * Vion(k)
-     &      * exp(
-     &         (Omg(k) - Fcon*psi_new*Zion(k) - press*Vion(k) - Omg0(k))
-     &         / RT )
+     &      + (Cw/RT) 
+     &      * ( Gshear/(three*phi0*detFs) * ID3 + kappa/two * CInv )
+     &      * Zion(k) * Vion(k) * boltzmannFac(k)
       end do
 
 
@@ -662,9 +666,7 @@
       do k = 1, nIons
         dGdOmg(k,1)       = zero
         dGdOmg(k,k+1)     = -one
-        dGdOmg(k,nIons+2) = Cw_new/RT * Zion(k) *
-     &              exp( ( Omg(k) - Fcon*Zion(k)*psi_new
-     &                  - press*Vion(k) - Omg0(k) ) /RT )
+        dGdOmg(k,nIons+2) = Cw/RT * Zion(k) * boltzmannFac(k)
       end do
 
 
@@ -687,8 +689,11 @@
 
 
 
-      ! (6) calculate dS/dCw (a symmetric second order tensor)
-      dSdCwTensor =  Kappa * Vw * ( log(detFe) - one ) * CInv
+      ! (6.1) calculate dP/dCw (a unsymmetric second order tensor)
+      dSdCwTensor =  Kappa * Vw * (log(detFe) - one) * CInv
+
+      ! (6.2) calculate dS/dCw (a symmetric second order tensor)
+      dPdCwTensor =  Kappa * Vw * (log(detFe) - one) * FInvT
 
 
       ! (7) calculate material tangent (CTensor = 2*dS/dC)
@@ -707,8 +712,7 @@
      &          + Gshear * (phi0)**(two/three) * Finv(l,i) * Finv(j,k)
      &          + Kappa*phi0*detFs * Finv(j,i) * Finv(l,k)
      &          - Kappa*phi0*detFs*log(detFe) * Finv(l,i) * Finv(j,k)
-     &          + Kappa * Vw * (log(detFe)-one) * FInvT(i,j)
-     &            * dCwdFTensor(k,l)
+     &          + dPdCwTensor(i,j) * dCwdFTensor(k,l)
               end do
             end do
           end do
@@ -784,8 +788,8 @@
           do l = 1, 3
             do j = 1, nDim                ! summation over dummy index j
               dJwdFTensor(i,k,l) = dJwdFTensor(i,k,l)
-     &            + (Dw*Cw_new)/RT
-     &            * ( FInv(i,k)*CInv(l,j) ) * dMudX(j,1)
+     &            + (Dw/RT) * Cw
+     &              * ( FInv(i,k)*CInv(l,j) ) * dMudX(j,1)
      &            - (Dw/RT) * CInv(i,j) * dMudX(j,1) * dCwdFTensor(k,l)
             end do
           end do
@@ -814,8 +818,8 @@
             do l = 1, 3
               do j = 1, nDim               ! summation over dummy index j
                 dJiondFTensor(n,i,k,l) = dJiondFTensor(n,i,k,l)
-     &            + ( Dion(n)*Cion_new(n) )/RT
-     &            * ( FInv(i,k)*CInv(l,j) ) * dOmgdX(n,j,1)
+     &            + ( Dion(n)/RT ) * Cion(n)
+     &              * ( FInv(i,k)*CInv(l,j) ) * dOmgdX(n,j,1)
      &            - ( Dion(n)/RT ) * CInv(i,j)
      &              * dOmgdX(n,j,1) * dCiondFTensor(n,k,l)
               end do
@@ -869,12 +873,12 @@
       globalPostVars(jelem,intPt,nStress+1:2*nStress)
      &                      = strainEuler(1:nStress,1)
 
-      globalPostVars(jelem,intPt,2*nStress+1)= phi_new
+      globalPostVars(jelem,intPt,2*nStress+1)= phi
 
       globalPostVars(jelem,intPt,2*nStress+2:2*nStress+nIons+1)
-     &                      = Cion_new(1:nIons)
+     &                      = Cion(1:nIons)
 
-      globalPostVars(jelem,intPt,2*nStress+nIons+2) = psi_new
+      globalPostVars(jelem,intPt,2*nStress+nIons+2) = psi
 
       !!!!!!!!!!!!!!!!! END POST-PROCESSING SECTION !!!!!!!!!!!!!!!!!!!!
 
@@ -909,12 +913,13 @@
       real(wp)                :: C0_fix, Vp, Zfix
       real(wp)                :: mu0, Vw, chi, Dw      
       real(wp), allocatable   :: Omg0(:), Cion0(:), Vion(:)
-      real(wp), allocatable   :: Zion(:), Dion(:), Omg(:)
+      real(wp), allocatable   :: Zion(:), Dion(:)
 
       real(wp)                :: trC, detF, mu
       real(wp)                :: phi, detFs, detFe
-      real(wp)                :: lagrangeMult, press, CionTotal
-      real(wp)                :: dPhidCw, dPressdCw, boltzmannFac
+      real(wp)                :: lagrangeMult, pressure, CionTotal
+      real(wp)                :: dPhidCw, dPressuredCw
+      real(wp), allocatable   ::  Omg(:), boltzmannFac(:)
 
       real(wp)                :: Cw, psi
       real(wp), allocatable   :: Cion(:)
@@ -936,7 +941,9 @@
 
 
       allocate( Omg0(nIons), Cion0(nIons), Vion(nIons), Zion(nIons), 
-     &          Dion(nIons), Omg(nIons), Cion(nIons) )
+     &          Dion(nIons) )
+
+      allocate( Omg(nIons), Cion(nIons), boltzmannFac(nIons) )
 
 
       if ( present(vars) ) then
@@ -995,30 +1002,40 @@
       Cion    = x(2:nIons+1)
       psi     = x(nIons+2)
 
+
+      if ( Cw .lt. 1.0e-10_wp ) then
+        call msg%ferror( flag=error, src='electroChemicalState',
+     &            msg='Cw is close to 0.0', ra=Cw)
+        call xit
+      end if
+
       ! total ion concentration
       CionTotal = sum(Cion)
 
       ! calculate all the intermediate variables
       phi     = phi0/ ( phi0 + Cw*Vw )
-      detFs   = one/phi
-      detFe   = detF/(phi0*detFs)
-
-      lagrangeMult  = (Kappa/two)*(log(detFe))**two - Kappa*log(detFe)
-
-      press   = - (Gshear)/(three*phi0*detFs)
-     &            * ( trC - three * phi0**(two/three) )
-     &            - Kappa * ( log(detFe) )
-
 
       if ( abs(one-phi) < 1.0e-8_wp ) then
         call msg%ferror( flag=error, src='electroChemicalState',
      &            msg='phi is close to 1.0', ra=phi)
         call xit
-      else if ( Cw .lt. 1.0e-10_wp ) then
-        call msg%ferror( flag=error, src='electroChemicalState',
-     &            msg='Cw is close to 0.0', ra=Cw)
-        call xit
       end if
+
+      detFs   = one/phi
+      detFe   = detF/(phi0*detFs)
+
+      lagrangeMult  = (Kappa/two)*(log(detFe))**two - Kappa*log(detFe)
+
+      pressure      = - (Gshear)/(three*phi0*detFs)
+     &                * ( trC - three * phi0**(two/three) )
+     &                - Kappa * ( log(detFe) )
+
+      boltzmannFac = zero 
+
+      do k = 1, nIons
+        boltzmannFac(k)   = exp( ( Omg(k) - Fcon*Zion(k)*psi
+     &                            - pressure*Vion(k) - Omg0(k) ) /RT )
+      end do
 
 
 
@@ -1040,7 +1057,7 @@
       do k = 1, nIons
         fvec(k+1) = Omg0(k) + RT*log( Cion(k)/Cw )
      &            + Fcon * Zion(k) * psi
-     &            + press * Vion(k) - Omg(k)
+     &            + pressure * Vion(k) - Omg(k)
         end do
 
 
@@ -1048,11 +1065,7 @@
       fvec(nIons+2) = C0_fix * Zfix
 
       do k = 1, nIons
-        fvec(nIons+2) = fvec(nIons+2) +
-     &     Cw * Zion(k) * exp
-     &      (
-     &       (Omg(k)-Fcon*Zion(k)*psi-press*Vion(k)-Omg0(k))/RT
-     &      )
+        fvec(nIons+2) = fvec(nIons+2) + Cw * Zion(k) * boltzmannFac(k)
       end do
 
       !!!!!!!!!!!!!!!!!!! END LOCAL RESIDUAL VECTOR !!!!!!!!!!!!!!!!!!!!
@@ -1065,13 +1078,13 @@
 
         fjac  = zero          ! initialize
 
-        dPhidCw   = - (phi**two/phi0) * Vw
+        dPhidCw       = - (phi**two/phi0) * Vw
 
-        dPressdCw = - dPhidCw *
-     &        ( 
-     &          ( Gshear/(three*phi0) ) *
-     &          ( trC - three*(phi0)**(two/three) ) + Kappa/phi 
-     &        )
+        dPressuredCw  = - dPhidCw *
+     &                ( 
+     &                  ( Gshear / (three*phi0) ) *
+     &                  ( trC - three*(phi0)**(two/three) ) + Kappa/phi 
+     &                )
 
         ! first element (1,1): dG1/dCw
         fjac(1,1) = dPhidCw  *
@@ -1093,7 +1106,7 @@
         ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
         do k = 1, nIons
 
-          fjac(k+1,1)       = - RT/Cw + dPressdCw * Vion(k) 
+          fjac(k+1,1)       = - RT/Cw + dPressuredCw * Vion(k) 
 
           fjac(k+1,k+1)     = RT/Cion(k)
 
@@ -1103,29 +1116,21 @@
 
         !!  last row
         ! first element of last row of the jacobian (nIons+2,1) => dG_n+2/dCw
+        fjac(nIons+2,1)   = zero
         do k = 1, nIons
-
-          boltzmannFac    = exp( ( Omg(k) - Fcon*Zion(k)*psi
-     &                            - press*Vion(k) - Omg0(k) ) /RT )
-
           fjac(nIons+2,1) = fjac(nIons+2,1) +
-     &          Zion(k) * boltzmannFac *
-     &            ( one - ( Cw/RT ) *  dPressdCw * Vion(k) )
-
+     &          Zion(k) * boltzmannFac(k) *
+     &            ( one - ( Cw/RT ) *  dPressuredCw * Vion(k) )
         end do
 
         ! all the middle columns(nIons+2,2:nIons+1) => dG_n+2/dCion_k = 0
         fjac(nIons+2,2:nIons+1)     = zero
 
         ! last term of the last row (nIons+2,nIons+2)
+        fjac(nIons+2,nIons+2)   = zero 
         do k = 1, nIons
-
-          boltzmannFac   = exp( ( Omg(k) - Fcon*Zion(k)*psi
-     &                            - press*Vion(k) - Omg0(k) ) /RT )
-
           fjac(nIons+2,nIons+2) = fjac(nIons+2,nIons+2)
-     &            - ( Fcon*Cw/RT ) * Zion(k)**two * boltzmannFac
-
+     &            - (Cw/RT) * Fcon * Zion(k)**two * boltzmannFac(k)
         end do
 
       end if
