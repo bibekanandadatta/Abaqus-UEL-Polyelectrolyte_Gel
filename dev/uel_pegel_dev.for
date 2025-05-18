@@ -1015,7 +1015,7 @@
       ! calculate all the intermediate variables
       phi     = phi0/ ( phi0 + Cw*Vw )
 
-      if ( abs(one-phi) < 1.0e-8_wp ) then
+      if ( abs(one-phi) .lt. 1.0e-8_wp ) then
         call msg%ferror( flag=error, src='electroChemicalState',
      &            msg='phi is close to 1.0', ra=phi)
         call xit
