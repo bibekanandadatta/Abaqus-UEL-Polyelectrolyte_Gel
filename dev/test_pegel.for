@@ -70,7 +70,7 @@
 
 
       !! element type and element no
-      JTYPE       = 4           ! 4: QUAD4-AX and 6:QUAD4-PE
+      JTYPE       = 6           ! 4: QUAD4-AX and 6:QUAD4-PE
       JELEM       = 1           ! element no (ID) in patch test
       elemLen     = 1.0e-3_wp   ! element side length
 
@@ -220,11 +220,10 @@
       JPROPS(1:NJPROPS) = [nInt, fbarFlag, matID, nIonProps, nPostVars]
 
 
-
       !! initial condition for chemical potential and electrochemical potential
       RT          = Rgas*theta
       Cw0_gel     = (one - phi0)/Vw
-      Cw_sol      = 55000.0
+      Cw_sol      = 55500.0
 
       initMU      = mu0 + RT*( phi0+log(1-phi0)+chi*phi0**two )
      &              - RT/Cw0_gel*( Cion0(1) + Cion0(2) )
@@ -241,15 +240,6 @@
      &                    initOmg(1), initOmg(2),
      &                 zero,     zero,   initMU,
      &                    initOmg(1), initOmg(2)]
-
-    !    UAll(1:NDOFEL) = [ zero,      zero,     initMU,
-    !  &                    initOmg(1), initOmg(2),
-    !  &                    elemLen,     zero,     initMU,
-    !  &                    initOmg(1), initOmg(2),
-    !  &                    elemLen,  elemLen,  initMU,
-    !  &                    initOmg(1), initOmg(2),
-    !  &                    zero,   elemLen,   initMU,
-    !  &                    initOmg(1), initOmg(2) ]
 
 
       !! call the UEL subroutine
