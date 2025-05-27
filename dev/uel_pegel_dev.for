@@ -30,34 +30,8 @@
 !       symmetric stress and strain tensor following Voigt notation
 !       This is different than what is followed by Abaqus/ Standard
 !
-!         sigma11, sigma22, sigma33, sigma23, sigma13, sigma12
+!       stress11, stress22, stress33, stress23, stress13, stress12
 !       strain11, strain22, strain33, strain23, strain13, strain12
-!
-! **********************************************************************
-!
-!                       LIST OF MATERIAL PROPERTIES
-!
-!     Rgas      = props(1)        Universal gas constant
-!     Fcon      = props(2)        Faraday's constant
-!     theta     = props(3)        Absolute temperature (K)
-!     phi0      = props(4)        Initial polymer volume fraction
-!     rho       = props(5)        Density of the gel
-!     Gshear    = props(6)        Shear modulus
-!     Kappa     = props(7)        Bulk modulus
-!     pKa       = props(8)        log of acid disassociation constant
-!     C0_fix    = props(9)        Referential concentration of charged polymer
-!     Vp        = props(10)       Molar volume of polymer
-!     Zfix      = props(11)       Charge number of polymer
-!     mu0       = props(12)       Chemical potential of pure solvent
-!     Vw        = props(13)       Molar volume of the solvent
-!     chi       = props(14)       Flory-Huggins parameter
-!     Dw        = props(15)       Diffusion coefficient of the solvent
-!
-!     Cion0(k)  = props( 16+nIonProps*(k-1) )   Initial concentration of ions
-!     Omg0(k)   = props( 17+nIonProps*(k-1) )   Reference electrochemical potential
-!     Vion(k)   = props( 18+nIonProps*(k-1) )   Molar volume of ions
-!     Zion(k)   = props( 19+nIonProps*(k-1) )   Charge of ions
-!     Dion(k)   = props( 20+nIonProps*(k-1) )   Diffusivity of ions
 !
 ! **********************************************************************
 !
@@ -78,7 +52,7 @@
 !     uvar(nStress+1:2*nStress)             Euler strain tensor components
 !     uvar(2*nStress+1)                     Polymer volume fraction (phi)
 !     uvar(2*nStress+2:2*nStress+nIons+1)   Concentration of ions (C_ion)
-!     uvar(2*nStress+2)                     Electric potential (psi)
+!     uvar(2*nStress+nIons+2)               Electric potential (psi)
 !
 ! **********************************************************************
 !
@@ -178,8 +152,36 @@
      &          FSTensorUI,dCiondFTensor,dJiondFTensor,dCiondMu,dJidOmg,
      &          MmatII,MmatWI,MmatIW,dCwdOmg,dCiondOmg,dJwdOmg,dJidMu)
 
-      ! this subroutine calculates material response
+! **********************************************************************
+      ! this subroutine calculates constitutive response of materials
       ! it returns constitutive tensors and their tangents
+! **********************************************************************
+!
+!                       LIST OF MATERIAL PROPERTIES
+!
+!     Rgas      = props(1)        Universal gas constant
+!     Fcon      = props(2)        Faraday's constant
+!     theta     = props(3)        Absolute temperature (K)
+!     phi0      = props(4)        Initial polymer volume fraction
+!     rho       = props(5)        Density of the gel
+!     Gshear    = props(6)        Shear modulus
+!     Kappa     = props(7)        Bulk modulus
+!     pKa       = props(8)        log of acid disassociation constant
+!     C0_fix    = props(9)        Referential concentration of charged polymer
+!     Vp        = props(10)       Molar volume of polymer
+!     Zfix      = props(11)       Charge number of polymer
+!     mu0       = props(12)       Chemical potential of pure solvent
+!     Vw        = props(13)       Molar volume of the solvent
+!     chi       = props(14)       Flory-Huggins parameter
+!     Dw        = props(15)       Diffusion coefficient of the solvent
+!
+!     Cion0(k)  = props( 16+nIonProps*(k-1) )   Initial concentration of ions
+!     Omg0(k)   = props( 17+nIonProps*(k-1) )   Reference electrochemical potential
+!     Vion(k)   = props( 18+nIonProps*(k-1) )   Molar volume of ions
+!     Zion(k)   = props( 19+nIonProps*(k-1) )   Charge of ions
+!     Dion(k)   = props( 20+nIonProps*(k-1) )   Diffusivity of ions
+!
+! **********************************************************************
 
       use global_parameters
       use error_logging
@@ -483,8 +485,6 @@
 
 
 
-
-
       !!!!!!!!!!!!!!!!!! ELEMENT RESIDUAL QUANTITITES !!!!!!!!!!!!!!!!!!
 
       ! (1.1) stress tensors
@@ -535,6 +535,7 @@
       end do
 
       !!!!!!!!!!!!!!!! END ELEMENT RESIDUAL QUANTITITES !!!!!!!!!!!!!!!!
+
 
 
 
@@ -781,7 +782,7 @@
       end do
 
 
-      ! (11.1) Jw tensor = dJw/dF (FIX)
+      ! (11.1) Jw tensor = dJw/dF
       dJwdFTensor = zero
       do i = 1, nDim
         do k = 1, 3
@@ -844,8 +845,6 @@
       end do
 
       !!!!!!!!!!!!!!!!! END ELEMENT TANGENT QUANTITITES !!!!!!!!!!!!!!!!
-
-
 
 
 
@@ -1027,7 +1026,7 @@
       lagrangeMult  = (Kappa/two)*(log(detFe))**two - Kappa*log(detFe)
 
       pressure      = - (Gshear)/(three*phi0*detFs)
-     &                * ( trC - three * phi0**(two/three) )
+     &                  * ( trC - three * phi0**(two/three) )
      &                - Kappa * ( log(detFe) )
 
       boltzmannFac = zero
@@ -1099,9 +1098,6 @@
           fjac(1,k+1)     = - RT/Cw
         end do
 
-        ! last element of the first row (1,nIons+2) => (dG1/dpsi = 0)
-        fjac(1,nIons+2)   = zero
-
 
         ! center block of the jacobian matrix (2:nIons+1,2:nIons+2)
         do k = 1, nIons
@@ -1123,9 +1119,6 @@
      &            ( one - ( Cw/RT ) *  dPressuredCw * Vion(k) )
         end do
 
-        ! all the middle columns(nIons+2,2:nIons+1) => dG_n+2/dCion_k = 0
-        fjac(nIons+2,2:nIons+1)     = zero
-
         ! last term of the last row (nIons+2,nIons+2)
         fjac(nIons+2,nIons+2)   = zero
         do k = 1, nIons
@@ -1139,8 +1132,8 @@
 
       end subroutine electroChemicalState
 
-
       end subroutine neohookean_flory2
+
 
       end module pegel_material
 
@@ -1362,7 +1355,7 @@
       hydrogel  = element(nDim=nDim, analysis=analysis,
      &                    nNode=nNode, nInt=nInt)
 
-
+      ! initialize the variables
       F0      = zero
       Fbar    = zero
       Ga0     = zero
@@ -1536,7 +1529,7 @@
 
       !!!!!!!!!!!!!!!!!!!! INTEGRATION POINT LOOP !!!!!!!!!!!!!!!!!!!!!
 
-       ! get the weights and coordinates for gauss quadrature
+      ! get the weights and coordinates for gauss quadrature
       call getGaussQuadrtr(hydrogel,wInt,xiInt)
 
       do intPt = 1, nInt
@@ -1611,7 +1604,6 @@
 
 
 
-
         !!!!!!!!!!!!!!!!!! CONSTITUTIVE CALCULATION !!!!!!!!!!!!!!!!!!!
 
         ! calculate the coordinate of integration point
@@ -1676,7 +1668,8 @@
 
 
         ! call material point subroutine for the polyelectrolyte gel
-        if (matID .eq. 1) then
+        select case(matID)
+        case(1)
           call neohookean_flory2(kstep,kinc,time,dtime,nDim,analysis,
      &          nStress,nNode,jelem,intpt,coord_ip,props,nprops,
      &          jprops,njprops,nIons,matID,Fbar,mu,dMudX,Omg,dOmgdX,
@@ -1687,11 +1680,11 @@
      &          FSTensorUM,dCwdFTensor,dJwdFTensor,dCwdMu,dJwdMu,MmatW,
      &          FSTensorUI,dCiondFTensor,dJiondFTensor,dCiondMu,dJidOmg,
      &          MmatII,MmatWI,MmatIW,dCwdOmg,dCiondOmg,dJwdOmg,dJidMu)
-        else
+        case default
           call msg%ferror(flag=error, src='pegel_general',
-     &            msg='Material model is not available: ', ia=matID)
+     &          msg='Material model is not available: ', ia=matID)
           call xit
-        end if
+        end select
 
         !!!!!!!!!!!!!!! END CONSTITUTIVE CALCULATION !!!!!!!!!!!!!!!!!!
 
@@ -1988,6 +1981,7 @@
 
         !!!!!!!!!!!!!! END TANGENT MATRIX CALCULATION !!!!!!!!!!!!!!!!!
 
+
       end do
       !!!!!!!!!!!!!!!! END OF INTEGRATION POINT LOOP !!!!!!!!!!!!!!!!!!
 
@@ -2006,7 +2000,6 @@
       rhs(1:NDOFEL,1)           = Relem(1:NDOFEL,1)
 
       !!!!!!!!!!!!!!!!!!!!!!!!! END SUBROUTINE !!!!!!!!!!!!!!!!!!!!!!!!!
-
 
       end subroutine pegel_general
 
@@ -2229,6 +2222,7 @@
       hydrogel  = element(nDim=nDim, analysis=analysis,
      &                    nNode=nNode, nInt=nInt)
 
+      ! initialize the variables
       F0      = zero
       Fbar    = zero
       Ga0     = zero
@@ -2254,7 +2248,7 @@
       Kim     = zero
       Kii     = zero
 
-
+      ! read the properties for variable allocation
       matID     = jprops(3)
       nIonProps = jprops(4)
       nstatev   = nsvars/nint
@@ -2593,7 +2587,8 @@
 
 
         ! call material point subroutine for the polyelectrolyte gel
-        if (matID .eq. 1) then
+        select case(matID)
+        case(1)
           call neohookean_flory2(kstep,kinc,time,dtime,nDim,analysis,
      &          nStress,nNode,jelem,intpt,coord_ip,props,nprops,
      &          jprops,njprops,nIons,matID,Fbar,mu,dMudX,Omg,dOmgdX,
@@ -2604,11 +2599,11 @@
      &          FSTensorUM,dCwdFTensor,dJwdFTensor,dCwdMu,dJwdMu,MmatW,
      &          FSTensorUI,dCiondFTensor,dJiondFTensor,dCiondMu,dJidOmg,
      &          MmatII,MmatWI,MmatIW,dCwdOmg,dCiondOmg,dJwdOmg,dJidMu)
-        else
+        case default
           call msg%ferror(flag=error, src='pegel_axisymmetric',
      &          msg='Material model is not available: ', ia=matID)
           call xit
-        end if
+        end select
 
         !!!!!!!!!!!!!!! END CONSTITUTIVE CALCULATION !!!!!!!!!!!!!!!!!!
 
@@ -2737,7 +2732,6 @@
         end do
 
         !!!!!!!!!!!!!! END RESIDUAL VECTOR CALCULATION !!!!!!!!!!!!!!!!
-
 
 
 
@@ -3093,27 +3087,28 @@
 
 
       ! define different element parameters
-      if ( (jtype .eq. 1) .or. (jtype .eq. 2) ) then
+      select case (jtype)
+      case (1, 2)
         nDim      = 3
         analysis  = '3D'          ! three-dimensional analysis
         nStress   = 6
-      else if ( (jtype .eq. 3) .or. jtype .eq. 4) then
+      case (3, 4)
         nDim      = 2
         analysis  = 'AX'          ! plane axisymmetric analysis
         nStress   = 4
-      else if ( (jtype .eq. 5) .or. (jtype .eq. 6) ) then
+      case (5, 6)
         nDim      = 2
         analysis  = 'PE'          ! 2D plane-strain analysis
         nStress   = 3
-      else if ( (jtype .eq. 7) .or. (jtype .eq. 8) ) then
+      case (7, 8)
         nDim      = 2
         analysis  = 'PS'          ! 2D plane-stress analysis (currently unavailable)
         nStress   = 3
-      else
+      case default
         call msg%ferror(error,src='uel',
      &            msg='Element type is unavailable: ', ia=jtype)
         call xit
-      end if
+      end select
 
 
       uDOF      = nDim                ! no of displacement degrees of freedom/ node
