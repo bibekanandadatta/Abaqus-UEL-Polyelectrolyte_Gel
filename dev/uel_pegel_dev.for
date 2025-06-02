@@ -23,15 +23,6 @@
 !     U7                PLANE STRESS TRI3 ELEMENT
 !     U8                PLANE STRESS QUAD4 ELEMENT
 !         REMARK: U7 and U8 are not currently available
-! **********************************************************************
-!          VOIGT NOTATION CONVENTION FOR STRESS/ STRAIN TENSORS
-!
-!       In this subroutine we adopted the following convention for
-!       symmetric stress and strain tensor following Voigt notation
-!       This is different than what is followed by Abaqus/ Standard
-!
-!       stress11, stress22, stress33, stress23, stress13, stress12
-!       strain11, strain22, strain33, strain23, strain13, strain12
 !
 ! **********************************************************************
 !
@@ -42,6 +33,17 @@
 !     jprops(3)   = matID           constitutive model for elastomeric network
 !     jprops(4)   = nIonProps       no of properties for each ion
 !     jprops(5)   = nPostVars       no of local (int pt) post-processing variables
+!
+! **********************************************************************
+
+!          VOIGT NOTATION CONVENTION FOR STRESS/ STRAIN TENSORS
+!
+!       In this subroutine we adopted the following convention for
+!       symmetric stress and strain tensor following Voigt notation
+!       This is different than what is followed by Abaqus/ Standard
+!
+!       stress11, stress22, stress33, stress23, stress13, stress12
+!       strain11, strain22, strain33, strain23, strain13, strain12
 !
 ! **********************************************************************
 !
@@ -153,8 +155,8 @@
      &          MmatII,MmatWI,MmatIW,dCwdOmg,dCiondOmg,dJwdOmg,dJidMu)
 
 ! **********************************************************************
-      ! this subroutine calculates constitutive response of materials
-      ! it returns constitutive tensors and their tangents
+!     this subroutine calculates constitutive response of materials
+!         it returns constitutive tensors and their tangents
 ! **********************************************************************
 !
 !                       LIST OF MATERIAL PROPERTIES
