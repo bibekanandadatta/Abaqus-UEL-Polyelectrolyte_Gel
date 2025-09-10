@@ -1,7 +1,6 @@
 *Heading
 ************************************************************************
 ** PARAMETERS (SI UNIT SYSTEM)
-** To ensure conevergence, time step size may need to be changed sometimes
 ************************************************************************
 *Parameter
 ** geometric parameters, element properties, and material ID

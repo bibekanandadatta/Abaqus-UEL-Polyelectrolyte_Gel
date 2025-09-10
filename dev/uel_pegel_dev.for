@@ -936,8 +936,8 @@
 
       if (nIons .lt. 2) then
         call msg%ferror( flag=error, src='electroChemicalState',
-     &        msg='Total ions should be at least 2', ia=nIons)
-          call xit
+     &        msg='There should be MINIMUM of 2 ions: ', ia=nIons)
+        call xit
       end if
 
 
@@ -993,7 +993,7 @@
 
       else
         call msg%ferror( flag=error, src='electroChemicalState',
-     &            msg='physical variables are not available.')
+     &            msg='Physical variables are not available.')
         call xit
 
       end if
@@ -1004,9 +1004,9 @@
       psi     = x(nIons+2)
 
 
-      if ( Cw .lt. 1.0e-10_wp ) then
+      if ( abs(Cw) .lt. 1.0e-10_wp ) then
         call msg%ferror( flag=error, src='electroChemicalState',
-     &            msg='Cw is close to 0.0', ra=Cw)
+     &            msg='Cw is close to 0.0: ', ra=Cw)
         call xit
       end if
 
@@ -1014,11 +1014,11 @@
       CionTotal = sum(Cion)
 
       ! calculate all the intermediate variables
-      phi     = phi0/ ( phi0 + Cw*Vw )
+      phi       = phi0/ ( phi0 + Cw*Vw )
 
       if ( abs(one-phi) .lt. 1.0e-8_wp ) then
         call msg%ferror( flag=error, src='electroChemicalState',
-     &            msg='phi is close to 1.0', ra=phi)
+     &            msg='phi is close to 1.0: ', ra=phi)
         call xit
       end if
 
@@ -1139,6 +1139,7 @@
 
       end module pegel_material
 
+! **********************************************************************
 ! **********************************************************************
 ! **********************************************************************
 
@@ -1657,7 +1658,7 @@
             tanFac2 = one
             call msg%ferror( flag=error, src='pegel_general',
      &          msg='F-bar is not available: ', ivec=[jtype, nInt])
-          call xit
+            call xit
           end if
         else
           ! set F-bar = F if fbarFlag is .false. for all element
@@ -2577,7 +2578,7 @@
             tanFac2 = one
             call msg%ferror( flag=error, src='pegel_axisymmetric',
      &          msg='F-bar is not available: ', ivec=[jtype, nInt])
-          call xit
+            call xit
           end if
         else
           ! set F-bar = F if fbarFlag is .false. for all element
@@ -2988,7 +2989,9 @@
       end module pegel_element
 
 ! **********************************************************************
+! **********************************************************************
 ! ****************** ABAQUS USER ELEMENT SUBROUTINE ********************
+! **********************************************************************
 ! **********************************************************************
 
       SUBROUTINE UEL(RHS,AMATRX,SVARS,ENERGY,NDOFEL,NRHS,NSVARS,
@@ -3126,7 +3129,7 @@
 
       if (nIons .lt. 2) then
         call msg%ferror(flag=error, src='uel',
-     &         msg='There should be MINIMUM of 2 ions', ia=nIons)
+     &         msg='There should be MINIMUM of 2 ions: ', ia=nIons)
         call xit
       end if
 
@@ -3194,6 +3197,9 @@
 
       END SUBROUTINE UEL
 
+! **********************************************************************
+! **********************************************************************
+! ************** ABAQUS USER OUTPUT VARIABLES SUBROUTINE ***************
 ! **********************************************************************
 ! **********************************************************************
 
