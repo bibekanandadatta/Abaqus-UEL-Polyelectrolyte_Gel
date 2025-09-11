@@ -3,8 +3,9 @@
 ** First run a free swelling simulation with a large plate_height
 ** Means deactivate the compression step
 ** Estimate the free swelling from the first run
-** Make plate_height slightly larger than free swelling height
-** It is opposite to the creep test
+** Make plate_height slightly smaller than free swelling height
+** Compression step is likely to fail if plate is not in contact
+** in the beginning of the compression step
 ************************************************************************
 *Parameter
 ** geometric parameters, element properties, and material ID
@@ -12,7 +13,7 @@ nDim        = 2
 nStress     = 4
 nNode       = 4
 nInt        = 4
-fbar        = 1
+fbar        = 0
 matID       = 1
 nIons       = 2
 nIonProps   = 5
@@ -66,15 +67,15 @@ initOmg2    = Omg0_2 + RT*log(Cion2_gel/Cw0_gel)
 **
 Cw_sol        = 55000.0
 **
-Cion1_sol     = 150.0
-Cion2_sol     = 150.0
+Cion1_sol     = 50.0
+Cion2_sol     = 50.0
 **
 mu_sol        = mu0 - RT/Cw_sol*(Cion1_sol + Cion2_sol)
 omg1_sol      = Omg0_1 + RT*log(Cion1_sol/Cw_sol)
 omg2_sol      = Omg0_2 + RT*log(Cion2_sol/Cw_sol)
 **
 force         = 10.0
-plate_height  = 4.45e-3
+plate_height  = 4.90e-3
 disp          = 2.0e-3
 plate_length  = 12.5e-3
 **
@@ -1502,11 +1503,11 @@ right, 13, 13, <omg2_sol>
 RigidRef,1,1,0.0
 RigidRef,3,6,0.0
 **
-** *Cload, amplitude=ForceAmp
-** RigidRef, 2, -1.0
+*Cload, amplitude=ForceAmp
+RigidRef, 2, -1.0
 **
-*Boundary, amplitude=DispAmp, OP=New
-RigidRef,2,2,-1.0
+** *Boundary, amplitude=DispAmp, OP=New
+** RigidRef,2,2,-1.0
 **
 *Boundary, op=new
 extraElement,encastre

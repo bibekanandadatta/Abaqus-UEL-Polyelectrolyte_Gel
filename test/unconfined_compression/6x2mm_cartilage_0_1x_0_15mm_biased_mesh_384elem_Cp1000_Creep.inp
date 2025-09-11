@@ -6,9 +6,6 @@
 ** Make plate_height slightly smaller than free swelling height
 ** Compression step is likely to fail if plate is not in contact
 ** in the beginning of the compression step
-** Free swelling step may fail if there is too much contact pressure
-** To make sure it runs without trouble, some trial and error is needed
-** from run to run.. It's just how it is!
 ************************************************************************
 *Parameter
 ** geometric parameters, element properties, and material ID
@@ -36,7 +33,7 @@ rho         = 1100.0
 Gshear      = 48.0e3
 kappa       = 50.0*Gshear
 pKa         = 5.0
-Cp_fix      = 460.0
+Cp_fix      = 1000.0
 Vp          = 8.928e-3
 Zp          = 1.0
 mu0         = 0.0
@@ -46,8 +43,8 @@ Dw          = 9.0e-7
 **
 ** properties of ions in gel
 **
-Cion1_gel   = 340.0
-Cion2_gel   = 800.0
+Cion1_gel   = 400.0
+Cion2_gel   = 1400.0
 Omg0_1      = 0.
 Omg0_2      = 0.
 Vion_1      = 2.38e-6
@@ -78,7 +75,7 @@ omg1_sol      = Omg0_1 + RT*log(Cion1_sol/Cw_sol)
 omg2_sol      = Omg0_2 + RT*log(Cion2_sol/Cw_sol)
 **
 force         = 10.0
-plate_height  = 4.41e-3
+plate_height  = 5.23e-3
 disp          = 2.0e-3
 plate_length  = 12.5e-3
 **
@@ -1508,9 +1505,6 @@ RigidRef,3,6,0.0
 **
 *Cload, amplitude=ForceAmp
 RigidRef, 2, -1.0
-**
-** *Boundary, amplitude=DispAmp, OP=New
-** RigidRef,2,2,-1.0
 **
 *Boundary, op=new
 extraElement,encastre
