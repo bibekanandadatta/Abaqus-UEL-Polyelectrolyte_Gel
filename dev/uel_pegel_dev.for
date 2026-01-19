@@ -322,7 +322,6 @@
 
       integer           :: i, j, k, l, m, n
       integer           :: nIonProps
-      type(logger)      :: msg
       type(options)     :: solverOpts
 
 
@@ -926,7 +925,6 @@
       real(wp), allocatable   :: Cion(:)
 
       integer                 :: nIons, k, l
-      type(logger)            :: msg
       integer, parameter      :: nIonProps = 5
 
 
@@ -936,8 +934,8 @@
 
       if (nIons .lt. 2) then
         call msg%ferror( flag=error, src='electroChemicalState',
-     &        msg='There should be MINIMUM of 2 ions: ', ia=nIons)
-        call xit
+     &        msg='Total ions should be at least 2', ia=nIons)
+          call xit
       end if
 
 
@@ -993,7 +991,7 @@
 
       else
         call msg%ferror( flag=error, src='electroChemicalState',
-     &            msg='Physical variables are not available.')
+     &            msg='physical variables are not available.')
         call xit
 
       end if
@@ -1004,9 +1002,9 @@
       psi     = x(nIons+2)
 
 
-      if ( abs(Cw) .lt. 1.0e-10_wp ) then
+      if ( Cw .lt. 1.0e-10_wp ) then
         call msg%ferror( flag=error, src='electroChemicalState',
-     &            msg='Cw is close to 0.0: ', ra=Cw)
+     &            msg='Cw is close to 0.0', ra=Cw)
         call xit
       end if
 
@@ -1014,11 +1012,11 @@
       CionTotal = sum(Cion)
 
       ! calculate all the intermediate variables
-      phi       = phi0/ ( phi0 + Cw*Vw )
+      phi     = phi0/ ( phi0 + Cw*Vw )
 
       if ( abs(one-phi) .lt. 1.0e-8_wp ) then
         call msg%ferror( flag=error, src='electroChemicalState',
-     &            msg='phi is close to 1.0: ', ra=phi)
+     &            msg='phi is close to 1.0', ra=phi)
         call xit
       end if
 
@@ -1139,7 +1137,6 @@
 
       end module pegel_material
 
-! **********************************************************************
 ! **********************************************************************
 ! **********************************************************************
 
@@ -1350,7 +1347,6 @@
 
       integer           :: i, j, k, l, m, n, p, q, intPt
       integer           :: nstatev
-      type(logger)      :: msg
       type(element)     :: hydrogel
 
 
@@ -1658,7 +1654,7 @@
             tanFac2 = one
             call msg%ferror( flag=error, src='pegel_general',
      &          msg='F-bar is not available: ', ivec=[jtype, nInt])
-            call xit
+          call xit
           end if
         else
           ! set F-bar = F if fbarFlag is .false. for all element
@@ -2217,7 +2213,6 @@
 
       integer           :: i, j, k, l, m, n, p, q, intPt
       integer           :: nstatev
-      type(logger)      :: msg
       type(element)     :: hydrogel
 
 
@@ -2578,7 +2573,7 @@
             tanFac2 = one
             call msg%ferror( flag=error, src='pegel_axisymmetric',
      &          msg='F-bar is not available: ', ivec=[jtype, nInt])
-            call xit
+          call xit
           end if
         else
           ! set F-bar = F if fbarFlag is .false. for all element
@@ -2989,9 +2984,7 @@
       end module pegel_element
 
 ! **********************************************************************
-! **********************************************************************
 ! ****************** ABAQUS USER ELEMENT SUBROUTINE ********************
-! **********************************************************************
 ! **********************************************************************
 
       SUBROUTINE UEL(RHS,AMATRX,SVARS,ENERGY,NDOFEL,NRHS,NSVARS,
@@ -3032,21 +3025,19 @@
       real(wp), intent(out), optional :: SVARS, ENERGY, PNEWDT
 
 
-      character(len=8)  :: abqProcedure
-      character(len=2)  :: analysis
-      logical           :: nlgeom
-      integer           :: nDim, nStress
-      integer           :: nInt, nIntS, matID, nIonProps, nPostVars
-      integer           :: uDOF, uDOFEL, mDOF, mDOFEL
-      integer           :: iDOF, iDOFEL, nIons, iNDOFEL
+      character(len=8)      :: abqProcedure
+      character(len=2)      :: analysis
+      logical               :: nlgeom
+      integer               :: nDim, nStress
+      integer               :: nInt, nIntS, matID, nIonProps, nPostVars
+      integer               :: uDOF, uDOFEL, mDOF, mDOFEL
+      integer               :: iDOF, iDOFEL, nIons, iNDOFEL
 
 
-      logical, parameter  :: devMode = .true.
-      integer             :: lenJobName,lenOutDir
-      character(len=256)  :: outDir
-      character(len=256)  :: jobName
-      character(len=512)  :: errFile, dbgFile
-      type(logger)        :: msg
+      logical, parameter    :: devMode = .true.
+      integer               :: lenJobName,lenOutDir
+      character(len=256)    :: outDir, jobName
+      character(len=512)    :: errFile
 
 
       ! open a log files for the current job from Abaqus job
@@ -3054,8 +3045,7 @@
         call getJobName(jobName, lenJobName)
         call getOutDir(outDir, lenOutDir)
         errFile = trim(outDir)//'\aaERR_'//trim(jobName)//'.dat'
-        dbgFile = trim(outDir)//'\aaDBG_'//trim(jobName)//'.dat'
-        call msg%fopen( errfile=errFile, dbgfile=dbgFile )
+        call msg%fopen( errfile=errFile )
       end if
 
 
@@ -3129,7 +3119,7 @@
 
       if (nIons .lt. 2) then
         call msg%ferror(flag=error, src='uel',
-     &         msg='There should be MINIMUM of 2 ions: ', ia=nIons)
+     &         msg='There should be MINIMUM of 2 ions', ia=nIons)
         call xit
       end if
 
@@ -3197,9 +3187,6 @@
 
       END SUBROUTINE UEL
 
-! **********************************************************************
-! **********************************************************************
-! ************** ABAQUS USER OUTPUT VARIABLES SUBROUTINE ***************
 ! **********************************************************************
 ! **********************************************************************
 

@@ -322,7 +322,6 @@
 
       integer           :: i, j, k, l, m, n
       integer           :: nIonProps
-      type(logger)      :: msg
       type(options)     :: solverOpts
 
 
@@ -926,7 +925,6 @@
       real(wp), allocatable   :: Cion(:)
 
       integer                 :: nIons, k, l
-      type(logger)            :: msg
       integer, parameter      :: nIonProps = 5
 
 
@@ -1350,7 +1348,6 @@
 
       integer           :: i, j, k, l, m, n, p, q, intPt
       integer           :: nstatev
-      type(logger)      :: msg
       type(element)     :: hydrogel
 
 
@@ -2217,7 +2214,6 @@
 
       integer           :: i, j, k, l, m, n, p, q, intPt
       integer           :: nstatev
-      type(logger)      :: msg
       type(element)     :: hydrogel
 
 
@@ -3032,21 +3028,19 @@
       real(wp), intent(out), optional :: SVARS, ENERGY, PNEWDT
 
 
-      character(len=8)  :: abqProcedure
-      character(len=2)  :: analysis
-      logical           :: nlgeom
-      integer           :: nDim, nStress
-      integer           :: nInt, nIntS, matID, nIonProps, nPostVars
-      integer           :: uDOF, uDOFEL, mDOF, mDOFEL
-      integer           :: iDOF, iDOFEL, nIons, iNDOFEL
+      character(len=8)      :: abqProcedure
+      character(len=2)      :: analysis
+      logical               :: nlgeom
+      integer               :: nDim, nStress
+      integer               :: nInt, nIntS, matID, nIonProps, nPostVars
+      integer               :: uDOF, uDOFEL, mDOF, mDOFEL
+      integer               :: iDOF, iDOFEL, nIons, iNDOFEL
 
 
-      logical, parameter  :: devMode = .false.
-      integer             :: lenJobName,lenOutDir
-      character(len=256)  :: outDir
-      character(len=256)  :: jobName
-      character(len=512)  :: errFile, dbgFile
-      type(logger)        :: msg
+      logical, parameter    :: devMode = .false.
+      integer               :: lenJobName,lenOutDir
+      character(len=256)    :: outDir, jobName
+      character(len=512)    :: errFile
 
 
       ! open a log files for the current job from Abaqus job
@@ -3054,8 +3048,7 @@
         call getJobName(jobName, lenJobName)
         call getOutDir(outDir, lenOutDir)
         errFile = trim(outDir)//'\aaERR_'//trim(jobName)//'.dat'
-        dbgFile = trim(outDir)//'\aaDBG_'//trim(jobName)//'.dat'
-        call msg%fopen( errfile=errFile, dbgfile=dbgFile )
+        call msg%fopen( errfile=errFile )
       end if
 
 
