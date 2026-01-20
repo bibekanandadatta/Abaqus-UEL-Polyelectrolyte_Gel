@@ -3037,26 +3037,10 @@
       integer               :: iDOF, iDOFEL, nIons, iNDOFEL
 
 
-      logical, parameter    :: devMode = .false.
-      integer               :: lenJobName,lenOutDir
-      character(len=256)    :: outDir, jobName
-      character(len=512)    :: errFile
-
-
-      ! open a log files for the current job from Abaqus job
-      if (devMode .eq. .false.) then
-        call getJobName(jobName, lenJobName)
-        call getOutDir(outDir, lenOutDir)
-        errFile = trim(outDir)//'\aaERR_'//trim(jobName)//'.dat'
-        call msg%fopen( errfile=errFile )
-      end if
-
-
       ! initialize primary output variable to be zero
       amatrx        = zero
       rhs(:,nrhs)   = zero
       energy        = zero
-
 
       ! change the LFLAGS criteria as needed (check abaqus UEL manual)
       if((lflags(1) .eq. 72) .or. (lflags(1) .eq. 73)) then
@@ -3107,7 +3091,6 @@
      &            msg='Element type is unavailable: ', ia=jtype)
         call xit
       end select
-
 
       uDOF      = nDim                ! no of displacement degrees of freedom/ node
       mDOF      = 1                   ! no of chem potential degrees of freedom/ node
@@ -3191,22 +3174,100 @@
       END SUBROUTINE UEL
 
 ! **********************************************************************
+! ************** ABAQUS USER DATABASE FILE I/O SUBROUTINE **************
+! **********************************************************************
+
+      SUBROUTINE UEXTERNALDB(LOP,LRESTART,TIME,DTIME,KSTEP,KINC)
+
+! **********************************************************************
+!     This Abaqus/Standard user subroutine file is used for external
+!     file i/o operation. User can open, close, write to external files
+!     at different stages of the simulation through this subroutine
+! **********************************************************************
+
+      use global_parameters
+      use error_logging
+
+      DIMENSION                TIME(2)
+
+      integer, intent(in)   :: lop, lrestart, kstep, kinc
+      real(wp), intent(in)  :: time, dtime
+
+      real(wp)              :: currentTime, totalTime
+      integer               :: lenJobName,lenOutDir
+      character(len=256)    :: jobName, outDir
+      character(len=512)    :: errFile
+
+
+      ! possible LOP argument parameter values
+      integer, parameter    :: startAnalysis    = 0
+      integer, parameter    :: startIncrement   = 1
+      integer, parameter    :: endIncrement     = 2
+      integer, parameter    :: endAnalysis      = 3
+      integer, parameter    :: restartAnalysis  = 4
+      integer, parameter    :: startStep        = 5
+      integer, parameter    :: endStep          = 6
+
+      ! possible LRESTART argument parameter values
+      integer, parameter    :: restartIgnore    = 0
+      integer, parameter    :: restartWrite     = 1
+      integer, parameter    :: restartOverwrite = 2
+
+
+      currentTime           = time(1)
+      totalTime             = time(2)
+
+      if (LOP .eq. startAnalysis) then
+
+        call getJobName(jobName, lenJobName)
+        call getOutDir(outDir, lenOutDir)
+        errFile = trim(outDir)//'\aaERR_'//trim(jobName)//'.dat'
+        call msg%fopen(errfile=errFile)
+
+      else if (LOP .eq. startIncrement) then
+        return
+
+      else if (LOP .eq. endIncrement) then
+        return
+
+      else if (LOP .eq. endAnalysis) then
+        call msg%finfo('Abaqus job completed successfully.')
+
+      else if (LOP .eq. restartAnalysis) then
+        return
+
+      else if (LOP .eq. startStep) then
+        return
+
+      else if (LOP .eq. endStep) then
+        return
+
+      end if
+
+      RETURN
+
+      END SUBROUTINE UEXTERNALDB
+
 ! **********************************************************************
 ! ************** ABAQUS USER OUTPUT VARIABLES SUBROUTINE ***************
 ! **********************************************************************
-! **********************************************************************
 
-      SUBROUTINE UVARM(UVAR,DIRECT,T,TIME,DTIME,CMNAME,ORNAME,
+       SUBROUTINE UVARM(UVAR,DIRECT,T,TIME,DTIME,CMNAME,ORNAME,
      & NUVARM,NOEL,NPT,LAYER,KSPT,KSTEP,KINC,NDI,NSHR,COORD,
      & JMAC,JMATYP,MATLAYO,LACCFLA)
-      ! this subroutine is used to transfer postVars from the UEL
-      ! onto the overlaying mesh for viewing. Note that an offset of
-      ! elemOffset is used between the real mesh and the overlaying mesh.
 
-      use global_parameters, only: wp
+! **********************************************************************
+!     This subroutine is called by Abaqus at each material point (int pt)
+!     to obtain the user defined output variables for standard Abaqus
+!     elements. We used an additional layer of standard Abaqus elements
+!     with same topology (same number of nodes and int pts) on top of
+!     the user elements with an offset in the numbering between the user
+!     elements and standard elements. This number is defined in the
+!     post_processing module and should match with Abaqus input file.
+! **********************************************************************
+
+      use global_parameters
       use post_processing
-
-      INCLUDE 'ABA_PARAM.INC'
 
       CHARACTER*80 CMNAME,ORNAME
       CHARACTER*3 FLGRAY(15)
@@ -3219,7 +3280,10 @@
       ! explicityly define the type for uvar to avoid issues
       real(wp)        :: uvar
 
+      ! assign the stored global variables to the UVAR for Abaqus to process
       uvar(1:nuvarm)  = globalPostVars(noel-elemOffset,npt,1:nuvarm)
+
+      RETURN
 
       END SUBROUTINE UVARM
 

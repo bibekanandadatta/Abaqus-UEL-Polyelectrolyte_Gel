@@ -1,4 +1,4 @@
-      include 'uel_pegel_dev.for'
+      include '../src/uel_pegel.for'
 
 ! **********************************************************************
 ! **********************************************************************
@@ -341,14 +341,6 @@
 
       END PROGRAM
 
-
-! **********************************************************************
-
-      ! this subroutine emulates the XIT subroutine in ABAQUS
-      SUBROUTINE XIT
-        stop
-      END SUBROUTINE XIT
-
 ! **********************************************************************
 
       SUBROUTINE PRINT_MAT( Kuu, Kum, Kui, Kmu, Kmm, Kmi, Kiu, Kim, Kii,
@@ -477,5 +469,28 @@
       enddo
 
       END SUBROUTINE PRINT_MAT
+
+! **********************************************************************
+
+      ! theses subroutines emulate the utility subroutines from ABAQUS
+      SUBROUTINE XIT
+        stop
+      END SUBROUTINE XIT
+
+      SUBROUTINE GETJOBNAME(jobName,lenJobName)
+
+        integer, intent(inout)            :: lenJobName
+        character(len=256), intent(inout) :: jobName
+
+        RETURN
+      END SUBROUTINE GETJOBNAME
+
+      SUBROUTINE GETOUTDIR(outDir,lenOutDir)
+
+        integer, intent(inout)            :: lenOutDir
+        character(len=256), intent(inout) :: outDir
+
+        RETURN
+      END SUBROUTINE GETOUTDIR
 
 ! **********************************************************************
