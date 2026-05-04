@@ -12,6 +12,7 @@
       module lagrange_element
 
       use global_parameters
+      use error_logging
 
       type, public  :: element
         integer                     :: nDim
@@ -27,7 +28,6 @@
       interface
 
         module subroutine calcInterpFunc(elem,xiCoord,Nxi,dNdxi)
-          use global_parameters, only: wp
           implicit none
           type(element), intent(in)   :: elem
           real(wp), intent(in)        :: xiCoord(:)
@@ -90,9 +90,6 @@
       ! Nxi(i)          = shape function of node i at the intpt.
       ! dNdxi(i,j)      = derivative wrt j direction of shape fn of node i
 
-      use global_parameters
-      use error_logging
-
       implicit none
 
       integer, intent(in)         :: nNode
@@ -139,9 +136,6 @@
 
       ! Nxi(i)          = shape function of node i at the intpt.
       ! dNdxi(i,j)      = derivative wrt j direction of shape fn of node i
-
-      use global_parameters
-      use error_logging
 
       implicit none
 
@@ -300,9 +294,6 @@
 
       ! Nxi(i)          = shape function of node i at the intpt.
       ! dNdxi(i,j)      = derivative wrt j direction of shape fn of node i
-
-      use global_parameters
-      use error_logging
 
       implicit none
 

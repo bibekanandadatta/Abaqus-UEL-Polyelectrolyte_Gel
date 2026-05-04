@@ -1,0 +1,724 @@
+1
+
+   Abaqus 2023                                  Date 01-May-2026   Time 17:25:09
+   For use by JOHNS HOPKINS UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+
+
+                         The Abaqus Software is a product of:
+
+                           Dassault Systemes SIMULIA Corp.
+                           1301 Atwood Avenue, Suite 101W
+                              Johnston, RI 02919, USA
+ 
+
+
+                   The Abaqus Software is available only under license
+                   from Dassault Systemes or its subsidiary and may be
+                   used or reproduced only in accordance with the terms
+                   of such license.
+ 
+                          On machine WSE-ME-JKLT7V3 
+                          you are authorized to run
+                          Abaqus/Standard until 27-Jun-2026
+
+                          Your site id is: 200000000022472 
+
+
+ 
+                    For assistance or any other information you may
+                    obtain contact information for your local office
+                    from the world wide web at:
+
+                      http://www.3ds.com/products/simulia/locations/
+
+ 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+                *                                                         * 
+                *                   *****************                     * 
+                *                   *  N O T I C E  *                     * 
+                *                   *****************                     * 
+                *                                                         * 
+                *                                                         * 
+                *                       Abaqus 2023                       * 
+                *                                                         * 
+                *          BUILD ID: 2022_09_28-14.11.55 183150           * 
+                *                                                         * 
+                *                                                         * 
+                *  Please make sure you are using                         * 
+                *  release Abaqus 2023 manuals                            * 
+                *  plus the notes accompanying this release.              * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                *                                                         * 
+                *   This program may not be used for commercial purposes  * 
+                *           without payment of a commercial fee.          * 
+                *                                                         * 
+                * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+
+
+ 
+
+
+
+     PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   *******************************************************
+
+
+     END PROCESSING PART, INSTANCE, AND ASSEMBLY INFORMATION
+   ***********************************************************
+
+1
+
+   Abaqus 2023                                  Date 01-May-2026   Time 17:25:09
+   For use by JOHNS HOPKINS UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+                                                                                     
+
+                                      P A R A M E T E R   I N T E R P R E T A T I O N
+
+
+                     
+                     ***COMMENT: STARTING PARAMETER EVALUATION
+                     
+                     ***COMMENT: STARTING PARAMETER SUBSTITUTION
+     LINE     5      
+                     ***COMMENT: EVALUATION AND SUBSTITUTION OF PARAMETERS COMPLETED
+                    --------------------------------------------------------------------------------
+                        5   10   15   20   25   30   35   40   45   50   55   60   65   70   75   80
+                    --------------------------------------------------------------------------------
+
+
+
+     OPTIONS BEING PROCESSED
+   ***************************
+
+
+  *User Element,Type=U4,Nodes=4,Coordinates=2,Properties=25,Iproperties=5,Variables=16,Unsymm
+  *Heading
+  *Node
+  *Element, type=U4
+  *System
+  *Nset, nset=all, generate
+  *Elset, elset=all, generate
+  *Nset, nset=bottom, generate
+  *Elset, elset=bottom, generate
+  *Nset, nset=left, generate
+  *Elset, elset=left, generate
+  *Nset, nset=right, generate
+  *Elset, elset=right, generate
+  *Nset, nset=top, generate
+  *Elset, elset=top, generate
+  *Element, type=CAX4
+  *Elset, elset=ElDummy, generate
+  *Node
+  *Element, Type=CPE4T
+  *Nset, nset=extraElement
+  *Elset,elset=extraElement
+  *Node
+  *Nset, Nset=RigidRef
+  *Coupled temperature-displacement, stabilize, deltmx=1000.0
+  *Coupled temperature-displacement, stabilize, deltmx=100.0
+  *Coupled temperature-displacement, STABILIZE, ALLSDTOL, CONTINUE=yes, deltmx=100.0
+  *Material, name=DummyMaterial
+  *Elastic
+  *User output variables
+  *Material, name=extraMaterial
+  *Elastic
+  *Conductivity
+  *Density
+  *Specific heat
+
+ ***WARNING: THE ABSOLUTE ZERO TEMPERATURE HAS NOT BEEN SPECIFIED FOR COMPUTING 
+             INTERNAL THERMAL ENERGY USING THE ABSOLUTE ZERO PARAMETER ON THE 
+             *PHYSICAL CONSTANTS OPTION. A DEFAULT VALUE OF 0.0000 WILL BE 
+             ASSUMED.
+  *Initial conditions, type=temperature
+  *Initial conditions, type=temperature
+  *Solid section, elset=ElDummy, material=DummyMaterial
+  *Solid section, elset=extraElement, material=extraMaterial
+  *User Element,Type=U4,Nodes=4,Coordinates=2,Properties=25,Iproperties=5,Variables=16,Unsymm
+  *Solid section, elset=ElDummy, material=DummyMaterial
+  *Solid section, elset=extraElement, material=extraMaterial
+  *Rigid Body, ref node=RigidRef, analytical surface=RigidSurf
+  *Contact Pair, Interaction=int, Type=node to surface
+  *Rigid Body, ref node=RigidRef, analytical surface=RigidSurf
+  *Rigid Body, ref node=RigidRef, analytical surface=RigidSurf
+  *Rigid Body, ref node=RigidRef, analytical surface=RigidSurf
+  *Contact Pair, Interaction=int, Type=node to surface
+  *Surface, Type=Node , Name=TopSurf
+  *Surface, type=SEGMENTS, name=RigidSurf
+
+ ***WARNING: THE CONTACT AREA OR DISTRIBUTING WEIGHT ASSOCIATED WITH 25 NODES 
+             IS ZERO OR NEGATIVE. A ONE IS ASSUMED FOR THE CONTACT AREA IF THE 
+             SURFACE IS USED IN A CONTACT CALCULATION. A ZERO IS ASSUMED FOR 
+             THE DISTRIBUTING WEIGHT FACTOR IF THE SURFACE IS USED IN A 
+             *COUPLING OR *SHELL TO SOLID COUPLING DEFINITION. ONE EXAMPLE OF 
+             SUCH A NODE IS 401. ALL NODES WITH THIS ISSUE ARE INCLUDED IN THE 
+             NODE SET NODES_ZERO_AREA. NODES WITH THIS ISSUE PER SECONDARY 
+             SURFACE ARE INCLUDED IN THE NODE SET NODES_ZERO_AREA_SurfaceName. 
+             PLEASE CHECK THAT THIS IS APPROPRIATE.
+  *Surface, Type=Node , Name=TopSurf
+  *Surface, type=SEGMENTS, name=RigidSurf
+  *Contact Pair, Interaction=int, Type=node to surface
+  *Surface Interaction, name=int
+  *Surface Behavior, pressure-overclosure=hard
+  *Contact Pair, Interaction=int, Type=node to surface
+  *Contact Pair, Interaction=int, Type=node to surface
+  *Rigid Body, ref node=RigidRef, analytical surface=RigidSurf
+  *Surface Interaction, name=int
+  *Friction
+  *Surface Behavior, pressure-overclosure=hard
+  *Initial conditions, type=temperature
+  *Initial conditions, type=temperature
+  *Surface Interaction, name=int
+  *Rigid Body, ref node=RigidRef, analytical surface=RigidSurf
+  *Rigid Body, ref node=RigidRef, analytical surface=RigidSurf
+  *Boundary
+  *Boundary, op=new
+  *Boundary, amplitude=mu_init_to_sol, op=new
+  *Boundary, amplitude=omg1_init_to_sol, op=new
+  *Boundary, amplitude=omg2_init_to_sol, op=new
+  *Boundary, op=new
+  *Boundary, op=new
+  *Boundary, op=new
+  *Boundary
+  *Contact Pair, Interaction=int, Type=node to surface
+  *Surface Interaction, name=int
+  *uel property,elset=all
+  *Contact Pair, Interaction=int, Type=node to surface
+  *Rigid Body, ref node=RigidRef, analytical surface=RigidSurf
+  *Surface, Type=Node , Name=TopSurf
+  *Surface, type=SEGMENTS, name=RigidSurf
+  *Output, field, frequency=2, time marks=no
+  *Output, field, frequency=2, time marks=no
+  *Output, field, frequency=1, time marks=no
+  *Output, history
+  *element output, elset=elDummy
+  *element output, elset=elDummy
+  *element output, elset=elDummy
+  *Initial conditions, type=temperature
+  *Initial conditions, type=temperature
+  *Output, field, frequency=2, time marks=no
+  *Output, field, frequency=2, time marks=no
+  *Output, field, frequency=1, time marks=no
+  *Output, history
+  *element output, elset=elDummy
+  *element output, elset=elDummy
+  *element output, elset=elDummy
+  *Initial conditions, type=temperature
+  *Initial conditions, type=temperature
+  *Output, field, frequency=2, time marks=no
+  *Output, field, frequency=2, time marks=no
+  *Output, field, frequency=1, time marks=no
+  *Output, history
+  *element output, elset=elDummy
+  *element output, elset=elDummy
+  *element output, elset=elDummy
+  *Step, Name=init, nlgeom=yes, inc=50000, UNSYMM=YES
+  *Output, field, frequency=2, time marks=no
+  *Step, Name=swell, nlgeom=yes, inc=50000, UNSYMM=YES
+  *Output, field, frequency=2, time marks=no
+  *Step, Name=compress, nlgeom=yes, convert sdi = yes, inc=50000, UNSYMM=YES
+  *Output, field, frequency=1, time marks=no
+  *Output, history
+  *Step, Name=init, nlgeom=yes, inc=50000, UNSYMM=YES
+  *Step, Name=swell, nlgeom=yes, inc=50000, UNSYMM=YES
+  *Step, Name=compress, nlgeom=yes, convert sdi = yes, inc=50000, UNSYMM=YES
+  *Step, Name=init, nlgeom=yes, inc=50000, UNSYMM=YES
+  *Coupled temperature-displacement, stabilize, deltmx=1000.0
+
+ ***WARNING: THE ADAPTIVE AUTOMATIC STABILIZATION SCHEME WITH ALLSDTOL=0.05 
+             WILL NOW BE USED BY DEFAULT IN THIS STEP. SET THE PARAMETER 
+             ALLSDTOL TO ZERO IF YOU WANT TO USE THE AUTOMATIC STABILIZATION 
+             SCHEME WITH A CONSTANT DAMPING FACTOR
+  *CONTROLS, PARAMETERS=TIME INCREMENTATION
+  *CONTROLS, PARAMETERS=LINE SEARCH
+  *Boundary
+  *Output, field, frequency=2, time marks=no
+  *node output, nset=all
+  *element output, elset=elDummy
+  *End Step
+
+ ***WARNING: THE *ELEMENT OUTPUT OPTION IS NOT SUPPORTED FOR USER ELEMENTS
+  *Step, Name=swell, nlgeom=yes, inc=50000, UNSYMM=YES
+  *Coupled temperature-displacement, stabilize, deltmx=100.0
+
+ ***WARNING: THE ADAPTIVE AUTOMATIC STABILIZATION SCHEME WITH ALLSDTOL=0.05 
+             WILL NOW BE USED BY DEFAULT IN THIS STEP. SET THE PARAMETER 
+             ALLSDTOL TO ZERO IF YOU WANT TO USE THE AUTOMATIC STABILIZATION 
+             SCHEME WITH A CONSTANT DAMPING FACTOR
+  *CONTROLS, PARAMETERS=TIME INCREMENTATION
+  *CONTROLS, PARAMETERS=LINE SEARCH
+  *Contact controls, STABILIZE
+
+ ***WARNING: *CONTACT CONTROLS, STABILIZE AND AUTOMATIC STABILIZATION (e.g. 
+             *STATIC, STABILIZE) SHOULD NOT BE USED IN THE SAME STEP. THIS MAY 
+             LEAD TO EXCESSIVE DAMPING OR CONVERGENCE PROBLEMS.
+  *Boundary, op=new
+  *Boundary, amplitude=mu_init_to_sol, op=new
+  *Boundary, amplitude=omg1_init_to_sol, op=new
+  *Boundary, amplitude=omg2_init_to_sol, op=new
+  *Boundary, op=new
+  *Output, field, frequency=2, time marks=no
+  *node output, nset=all
+  *element output, elset=elDummy
+  *End Step
+
+ ***WARNING: THE *ELEMENT OUTPUT OPTION IS NOT SUPPORTED FOR USER ELEMENTS
+  *Step, Name=compress, nlgeom=yes, convert sdi = yes, inc=50000, UNSYMM=YES
+  *Coupled temperature-displacement, STABILIZE, ALLSDTOL, CONTINUE=yes, deltmx=100.0
+
+ ***WARNING: THE VALUE SPECIFIED VIA THE STABILIZE OR THE FACTOR PARAMETERS IN 
+             THE CURRENT STEP WILL BE IGNORED WHEN CONTINUE=YES
+  *CONTROLS, PARAMETERS=TIME INCREMENTATION
+  *CONTROLS, PARAMETERS=LINE SEARCH
+  *Contact controls, STABILIZE
+
+ ***WARNING: *CONTACT CONTROLS, STABILIZE AND AUTOMATIC STABILIZATION (e.g. 
+             *STATIC, STABILIZE) SHOULD NOT BE USED IN THE SAME STEP. THIS MAY 
+             LEAD TO EXCESSIVE DAMPING OR CONVERGENCE PROBLEMS.
+  *Boundary, op=new
+  *Boundary, op=new
+  *Output, field, frequency=1, time marks=no
+  *node output, nset=all
+  *node output, nset=RigidRef
+  *element output, elset=elDummy
+  *Output, history
+  *node output,nset=RigidRef
+  *End Step
+
+ ***WARNING: THE *ELEMENT OUTPUT OPTION IS NOT SUPPORTED FOR USER ELEMENTS
+  *Step, Name=init, nlgeom=yes, inc=50000, UNSYMM=YES
+  *Coupled temperature-displacement, stabilize, deltmx=1000.0
+  *Boundary
+  *End Step
+  *Step, Name=swell, nlgeom=yes, inc=50000, UNSYMM=YES
+  *Coupled temperature-displacement, stabilize, deltmx=100.0
+  *Boundary, op=new
+  *Boundary, amplitude=mu_init_to_sol, op=new
+  *Boundary, amplitude=omg1_init_to_sol, op=new
+  *Boundary, amplitude=omg2_init_to_sol, op=new
+  *Boundary, op=new
+  *End Step
+  *Step, Name=compress, nlgeom=yes, convert sdi = yes, inc=50000, UNSYMM=YES
+  *Coupled temperature-displacement, STABILIZE, ALLSDTOL, CONTINUE=yes, deltmx=100.0
+  *Boundary, op=new
+  *Cload, amplitude=ForceAmp
+  *Boundary, op=new
+  *End Step
+
+ ***WARNING: BOUNDARY CONDITIONS ON DEGREES OF FREEDOM CONSTRAINED BY A TYPE 
+             BOUNDARY CONDITION ARE BEING REDEFINED ON AN INDIVIDUAL DEGREE OF 
+             FREEDOM BASIS
+
+ ***WARNING: BOUNDARY CONDITIONS ON DEGREES OF FREEDOM CONSTRAINED BY A TYPE 
+             BOUNDARY CONDITION ARE BEING REDEFINED ON AN INDIVIDUAL DEGREE OF 
+             FREEDOM BASIS
+
+ ***NOTE: Boundary conditions are specified on inactive dof of 1 nodes. The 
+          nodes have been identified in node set WarnNodeBCInactiveDof.
+
+
+
+                            P R O B L E M   S I Z E
+
+
+          NUMBER OF ELEMENTS IS                                   795
+          NUMBER OF ELEMENTS DEFINED BY THE USER AND *TIE         769
+          NUMBER OF INTERNAL ELEMENTS GENERATED FOR CONTACT        25
+          NUMBER OF NODES IS                                      480
+          NUMBER OF NODES DEFINED BY THE USER                     430
+          NUMBER OF INTERNAL NODES GENERATED BY THE PROGRAM        50
+          TOTAL NUMBER OF VARIABLES IN THE MODEL                 2191
+          (DEGREES OF FREEDOM PLUS MAX NO. OF ANY LAGRANGE MULTIPLIER
+           VARIABLES. INCLUDE *PRINT,SOLVE=YES TO GET THE ACTUAL NUMBER.)
+
+
+
+                              END OF USER INPUT PROCESSING
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =     0.10    
+       SYSTEM TIME (SEC)    =     0.10    
+       TOTAL CPU TIME (SEC) =     0.20    
+       WALLCLOCK TIME (SEC) =            0
+1
+
+   Abaqus 2023                                  Date 01-May-2026   Time 17:25:12
+   For use by JOHNS HOPKINS UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+                                                                                               STEP    1  INCREMENT    1
+                                                                                          TIME COMPLETED IN THIS STEP   0.00    
+
+
+                        S T E P       1     C O U P L E D - T E M P E R A T U R E - D I S P L A C E M E N T   A N A L Y S I S
+
+
+                                                                                          
+
+     AUTOMATIC TIME CONTROL WITH -
+          A SUGGESTED INITIAL TIME INCREMENT OF                1.000E-03
+          AND A TOTAL TIME PERIOD OF                            1.00    
+          THE MINIMUM TIME INCREMENT ALLOWED IS                1.000E-15
+          THE MAXIMUM TIME INCREMENT ALLOWED IS                0.200    
+
+          CREEP AND SWELLING EFFECTS ARE OMITTED IN THIS STEP
+
+     THE SIZE OF THE TIME INCREMENT IS CONTROLLED BY -
+          THE TEMPERATURE CHANGE PER INCREMENT NOT EXCEEDING           1.000E+03
+
+     ADAPTIVE AUTOMATIC STABILIZATION WITH 
+     INITIAL DISSIPATION INTENSITY =   2.000E-04
+          THE RATE DEPENDENCY WILL BE CONSIDERED IN THIS STEP
+
+          CREEP AND SWELLING EFFECTS WILL BE IGNORED.
+
+          LARGE DISPLACEMENT THEORY WILL BE USED
+
+          UNSYMMETRIC MATRIX STORAGE AND SOLUTION WILL BE USED
+
+
+
+                    TOTAL MASS OF MODEL
+
+                      1.0000000E-10
+
+
+                    LOCATION OF THE CENTER OF MASS OF THE MODEL
+
+                      5.0000000E-06      5.0000000E-06
+
+
+                    MOMENTS OF INERTIA ABOUT THE ORIGIN
+                           I(XX)               I(YY)               I(ZZ)
+
+                       0.000000           0.000000          1.0000000E-20
+
+
+                    PRODUCTS OF INERTIA ABOUT THE ORIGIN
+                           I(XY)               I(XZ)               I(YZ)
+
+                     -2.5000000E-21       0.000000           0.000000    
+
+
+                    MOMENTS OF INERTIA ABOUT THE CENTER OF MASS
+                           I(XX)               I(YY)               I(ZZ)
+
+                     -2.5000000E-21     -2.5000000E-21      5.0000000E-21
+
+
+                    PRODUCTS OF INERTIA ABOUT THE CENTER OF MASS
+                           I(XY)               I(XZ)               I(YZ)
+
+                     -3.7615819E-37       0.000000           0.000000    
+
+
+                              RIGID BODY MASS AND INERTIA 
+                              --------------------------- 
+
+ 
+ 
+                     REFERENCE NODE IS:      1000
+ 
+ 
+                     POSITION OF THE REFERENCE NODE
+                               X                Y                Z
+                          0.000000          4.2800000E-03       0.000000
+ 
+ 
+                     TOTAL MASS OF RIGID BODY
+ 
+                          0.000000
+ 
+ 
+                     LOCATION OF THE CENTER OF MASS OF RIGID BODY
+                          0.0000000E+00     0.0000000E+00
+ 
+ 
+                     MOMENTS OF INERTIA ABOUT THE CENTER OF RIGID BODY
+                            I(XX)               I(YY)               I(ZZ)
+                          0.000000           0.000000           0.000000
+ 
+ 
+                     PRODUCTS OF INERTIA ABOUT THE CENTER OF RIGID BODY
+                            I(XY)               I(XZ)               I(YZ)
+                          0.000000           0.000000           0.000000
+  
+                   M E M O R Y   E S T I M A T E
+  
+ PROCESS      FLOATING PT       MINIMUM MEMORY        MEMORY TO
+              OPERATIONS           REQUIRED          MINIMIZE I/O
+             PER ITERATION           (MB)               (MB)
+  
+     1          3.21E+07               20                 30
+  
+ NOTE:
+      (1) SINCE ABAQUS DOES NOT PRE-ALLOCATE MEMORY AND ONLY ALLOCATES MEMORY AS NEEDED DURING THE ANALYSIS,
+          THE MEMORY REQUIREMENT PRINTED HERE CAN ONLY BE VIEWED AS A GENERAL GUIDELINE BASED ON THE BEST
+          KNOWLEDGE AVAILABLE AT THE BEGINNING OF A STEP BEFORE THE SOLUTION PROCESS HAS BEGUN.
+      (2) THE ESTIMATE IS NORMALLY UPDATED AT THE BEGINNING OF EVERY STEP. IT IS THE MAXIMUM VALUE OF THE
+          ESTIMATE FROM THE CURRENT STEP TO THE LAST STEP OF THE ANALYSIS, WITH UNSYMMETRIC SOLUTION TAKEN
+          INTO ACCOUNT IF APPLICABLE. 
+      (3) SINCE THE ESTIMATE IS BASED ON THE ACTIVE DEGREES OF FREEDOM IN THE FIRST ITERATION OF THE 
+          CURRENT STEP, THE MEMORY ESTIMATE MIGHT BE SIGNIFICANTLY DIFFERENT THAN ACTUAL USAGE FOR 
+          PROBLEMS WITH SUBSTANTIAL CHANGES IN ACTIVE DEGREES OF FREEDOM BETWEEN STEPS (OR EVEN WITHIN
+          THE SAME STEP). EXAMPLES ARE: PROBLEMS WITH SIGNIFICANT CONTACT CHANGES, PROBLEMS WITH MODEL
+          CHANGE, PROBLEMS WITH BOTH STATIC STEP AND STEADY STATE DYNAMIC PROCEDURES WHERE ACOUSTIC 
+          ELEMENTS WILL ONLY BE ACTIVATED IN THE STEADY STATE DYNAMIC STEPS.
+      (4) FOR MULTI-PROCESS EXECUTION, THE ESTIMATED VALUE OF FLOATING POINT OPERATIONS FOR EACH PROCESS
+          IS BASED ON AN INITIAL SCHEDULING OF OPERATIONS AND MIGHT NOT REFLECT THE ACTUAL FLOATING 
+          POINT OPERATIONS COMPLETED ON EACH PROCESS. OPERATIONS ARE DYNAMICALLY BALANCED DURING EXECUTION, 
+          SO THE ACTUAL BALANCE OF OPERATIONS BETWEEN PROCESSES IS EXPECTED TO BE BETTER THAN THE ESTIMATE
+          PRINTED HERE.
+      (5) THE UPPER LIMIT OF MEMORY THAT CAN BE ALLOCATED BY ABAQUS WILL IN GENERAL DEPEND ON THE VALUE OF
+          THE "MEMORY" PARAMETER AND THE AMOUNT OF PHYSICAL MEMORY AVAILABLE ON THE MACHINE. PLEASE SEE
+          THE "ABAQUS ANALYSIS USER'S MANUAL" FOR MORE DETAILS. THE ACTUAL USAGE OF MEMORY AND OF DISK
+          SPACE FOR SCRATCH DATA WILL DEPEND ON THIS UPPER LIMIT AS WELL AS THE MEMORY REQUIRED TO MINIMIZE
+          I/O. IF THE MEMORY UPPER LIMIT IS GREATER THAN THE MEMORY REQUIRED TO MINIMIZE I/O, THEN THE ACTUAL
+          MEMORY USAGE WILL BE CLOSE TO THE ESTIMATED "MEMORY TO MINIMIZE I/O" VALUE, AND THE SCRATCH DISK
+          USAGE WILL BE CLOSE-TO-ZERO; OTHERWISE, THE ACTUAL MEMORY USED WILL BE CLOSE TO THE PREVIOUSLY
+          MENTIONED MEMORY LIMIT, AND THE SCRATCH DISK USAGE WILL BE ROUGHLY PROPORTIONAL TO THE DIFFERENCE
+          BETWEEN THE ESTIMATED "MEMORY TO MINIMIZE I/O" AND THE MEMORY UPPER LIMIT. HOWEVER ACCURATE
+          ESTIMATE OF THE SCRATCH DISK SPACE IS NOT POSSIBLE.
+      (6) USING "*RESTART, WRITE" CAN GENERATE A LARGE AMOUNT OF DATA WRITTEN IN THE WORK DIRECTORY.
+1
+
+   Abaqus 2023                                  Date 01-May-2026   Time 17:25:14
+   For use by JOHNS HOPKINS UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+                                                                                               STEP    2  INCREMENT    1
+                                                                                          TIME COMPLETED IN THIS STEP   0.00    
+
+
+                        S T E P       2     C O U P L E D - T E M P E R A T U R E - D I S P L A C E M E N T   A N A L Y S I S
+
+
+                                                                                          
+
+     AUTOMATIC TIME CONTROL WITH -
+          A SUGGESTED INITIAL TIME INCREMENT OF                1.000E-03
+          AND A TOTAL TIME PERIOD OF                            1.00    
+          THE MINIMUM TIME INCREMENT ALLOWED IS                1.000E-15
+          THE MAXIMUM TIME INCREMENT ALLOWED IS                0.200    
+
+          CREEP AND SWELLING EFFECTS ARE OMITTED IN THIS STEP
+
+     THE SIZE OF THE TIME INCREMENT IS CONTROLLED BY -
+          THE TEMPERATURE CHANGE PER INCREMENT NOT EXCEEDING            100.    
+
+     ADAPTIVE AUTOMATIC STABILIZATION WITH 
+     INITIAL DISSIPATION INTENSITY =   2.000E-04
+          THE RATE DEPENDENCY WILL BE CONSIDERED IN THIS STEP
+
+          CREEP AND SWELLING EFFECTS WILL BE IGNORED.
+
+          LARGE DISPLACEMENT THEORY WILL BE USED
+
+          UNSYMMETRIC MATRIX STORAGE AND SOLUTION WILL BE USED
+
+   NOTE:  THE FOLLOWING CENTER OF MASS AND MOMENT OF INERTIA CALCULATIONS ARE BASED ON CURRENT POSITION
+
+
+
+                    TOTAL MASS OF MODEL
+
+                      1.0000000E-10
+
+
+                    LOCATION OF THE CENTER OF MASS OF THE MODEL
+
+                      5.0000000E-06      5.0000000E-06
+
+
+                    MOMENTS OF INERTIA ABOUT THE ORIGIN
+                           I(XX)               I(YY)               I(ZZ)
+
+                       0.000000           0.000000          1.0000000E-20
+
+
+                    PRODUCTS OF INERTIA ABOUT THE ORIGIN
+                           I(XY)               I(XZ)               I(YZ)
+
+                     -2.5000000E-21       0.000000           0.000000    
+
+
+                    MOMENTS OF INERTIA ABOUT THE CENTER OF MASS
+                           I(XX)               I(YY)               I(ZZ)
+
+                     -2.5000000E-21     -2.5000000E-21      5.0000000E-21
+
+
+                    PRODUCTS OF INERTIA ABOUT THE CENTER OF MASS
+                           I(XY)               I(XZ)               I(YZ)
+
+                     -3.7615819E-37       0.000000           0.000000    
+  
+                   M E M O R Y   E S T I M A T E
+  
+ PROCESS      FLOATING PT       MINIMUM MEMORY        MEMORY TO
+              OPERATIONS           REQUIRED          MINIMIZE I/O
+             PER ITERATION           (MB)               (MB)
+  
+     1          3.21E+07               20                 30
+  
+ NOTE:
+      (1) SINCE ABAQUS DOES NOT PRE-ALLOCATE MEMORY AND ONLY ALLOCATES MEMORY AS NEEDED DURING THE ANALYSIS,
+          THE MEMORY REQUIREMENT PRINTED HERE CAN ONLY BE VIEWED AS A GENERAL GUIDELINE BASED ON THE BEST
+          KNOWLEDGE AVAILABLE AT THE BEGINNING OF A STEP BEFORE THE SOLUTION PROCESS HAS BEGUN.
+      (2) THE ESTIMATE IS NORMALLY UPDATED AT THE BEGINNING OF EVERY STEP. IT IS THE MAXIMUM VALUE OF THE
+          ESTIMATE FROM THE CURRENT STEP TO THE LAST STEP OF THE ANALYSIS, WITH UNSYMMETRIC SOLUTION TAKEN
+          INTO ACCOUNT IF APPLICABLE. 
+      (3) SINCE THE ESTIMATE IS BASED ON THE ACTIVE DEGREES OF FREEDOM IN THE FIRST ITERATION OF THE 
+          CURRENT STEP, THE MEMORY ESTIMATE MIGHT BE SIGNIFICANTLY DIFFERENT THAN ACTUAL USAGE FOR 
+          PROBLEMS WITH SUBSTANTIAL CHANGES IN ACTIVE DEGREES OF FREEDOM BETWEEN STEPS (OR EVEN WITHIN
+          THE SAME STEP). EXAMPLES ARE: PROBLEMS WITH SIGNIFICANT CONTACT CHANGES, PROBLEMS WITH MODEL
+          CHANGE, PROBLEMS WITH BOTH STATIC STEP AND STEADY STATE DYNAMIC PROCEDURES WHERE ACOUSTIC 
+          ELEMENTS WILL ONLY BE ACTIVATED IN THE STEADY STATE DYNAMIC STEPS.
+      (4) FOR MULTI-PROCESS EXECUTION, THE ESTIMATED VALUE OF FLOATING POINT OPERATIONS FOR EACH PROCESS
+          IS BASED ON AN INITIAL SCHEDULING OF OPERATIONS AND MIGHT NOT REFLECT THE ACTUAL FLOATING 
+          POINT OPERATIONS COMPLETED ON EACH PROCESS. OPERATIONS ARE DYNAMICALLY BALANCED DURING EXECUTION, 
+          SO THE ACTUAL BALANCE OF OPERATIONS BETWEEN PROCESSES IS EXPECTED TO BE BETTER THAN THE ESTIMATE
+          PRINTED HERE.
+      (5) THE UPPER LIMIT OF MEMORY THAT CAN BE ALLOCATED BY ABAQUS WILL IN GENERAL DEPEND ON THE VALUE OF
+          THE "MEMORY" PARAMETER AND THE AMOUNT OF PHYSICAL MEMORY AVAILABLE ON THE MACHINE. PLEASE SEE
+          THE "ABAQUS ANALYSIS USER'S MANUAL" FOR MORE DETAILS. THE ACTUAL USAGE OF MEMORY AND OF DISK
+          SPACE FOR SCRATCH DATA WILL DEPEND ON THIS UPPER LIMIT AS WELL AS THE MEMORY REQUIRED TO MINIMIZE
+          I/O. IF THE MEMORY UPPER LIMIT IS GREATER THAN THE MEMORY REQUIRED TO MINIMIZE I/O, THEN THE ACTUAL
+          MEMORY USAGE WILL BE CLOSE TO THE ESTIMATED "MEMORY TO MINIMIZE I/O" VALUE, AND THE SCRATCH DISK
+          USAGE WILL BE CLOSE-TO-ZERO; OTHERWISE, THE ACTUAL MEMORY USED WILL BE CLOSE TO THE PREVIOUSLY
+          MENTIONED MEMORY LIMIT, AND THE SCRATCH DISK USAGE WILL BE ROUGHLY PROPORTIONAL TO THE DIFFERENCE
+          BETWEEN THE ESTIMATED "MEMORY TO MINIMIZE I/O" AND THE MEMORY UPPER LIMIT. HOWEVER ACCURATE
+          ESTIMATE OF THE SCRATCH DISK SPACE IS NOT POSSIBLE.
+      (6) USING "*RESTART, WRITE" CAN GENERATE A LARGE AMOUNT OF DATA WRITTEN IN THE WORK DIRECTORY.
+1
+
+   Abaqus 2023                                  Date 01-May-2026   Time 17:25:54
+   For use by JOHNS HOPKINS UNIVERSITY under license from Dassault Systemes or its subsidiary.
+
+                                                                                               STEP    3  INCREMENT    1
+                                                                                          TIME COMPLETED IN THIS STEP   0.00    
+
+
+                        S T E P       3     C O U P L E D - T E M P E R A T U R E - D I S P L A C E M E N T   A N A L Y S I S
+
+
+                                                                                          
+
+     AUTOMATIC TIME CONTROL WITH -
+          A SUGGESTED INITIAL TIME INCREMENT OF                1.000E-06
+          AND A TOTAL TIME PERIOD OF                           4.320E+04
+          THE MINIMUM TIME INCREMENT ALLOWED IS                1.000E-15
+          THE MAXIMUM TIME INCREMENT ALLOWED IS                 300.    
+
+          CREEP AND SWELLING EFFECTS ARE OMITTED IN THIS STEP
+
+     THE SIZE OF THE TIME INCREMENT IS CONTROLLED BY -
+          THE TEMPERATURE CHANGE PER INCREMENT NOT EXCEEDING            100.    
+
+     ADAPTIVE AUTOMATIC STABILIZATION WITH 
+     INITIAL DISSIPATION INTENSITY =   2.000E-04
+          THE RATE DEPENDENCY WILL BE CONSIDERED IN THIS STEP
+
+          CREEP AND SWELLING EFFECTS WILL BE IGNORED.
+
+          LARGE DISPLACEMENT THEORY WILL BE USED
+
+          UNSYMMETRIC MATRIX STORAGE AND SOLUTION WILL BE USED
+
+   NOTE:  THE FOLLOWING CENTER OF MASS AND MOMENT OF INERTIA CALCULATIONS ARE BASED ON CURRENT POSITION
+
+
+
+                    TOTAL MASS OF MODEL
+
+                      1.0000000E-10
+
+
+                    LOCATION OF THE CENTER OF MASS OF THE MODEL
+
+                      5.0000000E-06      5.0000000E-06
+
+
+                    MOMENTS OF INERTIA ABOUT THE ORIGIN
+                           I(XX)               I(YY)               I(ZZ)
+
+                       0.000000           0.000000          1.0000000E-20
+
+
+                    PRODUCTS OF INERTIA ABOUT THE ORIGIN
+                           I(XY)               I(XZ)               I(YZ)
+
+                     -2.5000000E-21       0.000000           0.000000    
+
+
+                    MOMENTS OF INERTIA ABOUT THE CENTER OF MASS
+                           I(XX)               I(YY)               I(ZZ)
+
+                     -2.5000000E-21     -2.5000000E-21      5.0000000E-21
+
+
+                    PRODUCTS OF INERTIA ABOUT THE CENTER OF MASS
+                           I(XY)               I(XZ)               I(YZ)
+
+                     -3.7615819E-37       0.000000           0.000000    
+  
+                   M E M O R Y   E S T I M A T E
+  
+ PROCESS      FLOATING PT       MINIMUM MEMORY        MEMORY TO
+              OPERATIONS           REQUIRED          MINIMIZE I/O
+             PER ITERATION           (MB)               (MB)
+  
+     1          3.39E+07               19                 30
+  
+ NOTE:
+      (1) SINCE ABAQUS DOES NOT PRE-ALLOCATE MEMORY AND ONLY ALLOCATES MEMORY AS NEEDED DURING THE ANALYSIS,
+          THE MEMORY REQUIREMENT PRINTED HERE CAN ONLY BE VIEWED AS A GENERAL GUIDELINE BASED ON THE BEST
+          KNOWLEDGE AVAILABLE AT THE BEGINNING OF A STEP BEFORE THE SOLUTION PROCESS HAS BEGUN.
+      (2) THE ESTIMATE IS NORMALLY UPDATED AT THE BEGINNING OF EVERY STEP. IT IS THE MAXIMUM VALUE OF THE
+          ESTIMATE FROM THE CURRENT STEP TO THE LAST STEP OF THE ANALYSIS, WITH UNSYMMETRIC SOLUTION TAKEN
+          INTO ACCOUNT IF APPLICABLE. 
+      (3) SINCE THE ESTIMATE IS BASED ON THE ACTIVE DEGREES OF FREEDOM IN THE FIRST ITERATION OF THE 
+          CURRENT STEP, THE MEMORY ESTIMATE MIGHT BE SIGNIFICANTLY DIFFERENT THAN ACTUAL USAGE FOR 
+          PROBLEMS WITH SUBSTANTIAL CHANGES IN ACTIVE DEGREES OF FREEDOM BETWEEN STEPS (OR EVEN WITHIN
+          THE SAME STEP). EXAMPLES ARE: PROBLEMS WITH SIGNIFICANT CONTACT CHANGES, PROBLEMS WITH MODEL
+          CHANGE, PROBLEMS WITH BOTH STATIC STEP AND STEADY STATE DYNAMIC PROCEDURES WHERE ACOUSTIC 
+          ELEMENTS WILL ONLY BE ACTIVATED IN THE STEADY STATE DYNAMIC STEPS.
+      (4) FOR MULTI-PROCESS EXECUTION, THE ESTIMATED VALUE OF FLOATING POINT OPERATIONS FOR EACH PROCESS
+          IS BASED ON AN INITIAL SCHEDULING OF OPERATIONS AND MIGHT NOT REFLECT THE ACTUAL FLOATING 
+          POINT OPERATIONS COMPLETED ON EACH PROCESS. OPERATIONS ARE DYNAMICALLY BALANCED DURING EXECUTION, 
+          SO THE ACTUAL BALANCE OF OPERATIONS BETWEEN PROCESSES IS EXPECTED TO BE BETTER THAN THE ESTIMATE
+          PRINTED HERE.
+      (5) THE UPPER LIMIT OF MEMORY THAT CAN BE ALLOCATED BY ABAQUS WILL IN GENERAL DEPEND ON THE VALUE OF
+          THE "MEMORY" PARAMETER AND THE AMOUNT OF PHYSICAL MEMORY AVAILABLE ON THE MACHINE. PLEASE SEE
+          THE "ABAQUS ANALYSIS USER'S MANUAL" FOR MORE DETAILS. THE ACTUAL USAGE OF MEMORY AND OF DISK
+          SPACE FOR SCRATCH DATA WILL DEPEND ON THIS UPPER LIMIT AS WELL AS THE MEMORY REQUIRED TO MINIMIZE
+          I/O. IF THE MEMORY UPPER LIMIT IS GREATER THAN THE MEMORY REQUIRED TO MINIMIZE I/O, THEN THE ACTUAL
+          MEMORY USAGE WILL BE CLOSE TO THE ESTIMATED "MEMORY TO MINIMIZE I/O" VALUE, AND THE SCRATCH DISK
+          USAGE WILL BE CLOSE-TO-ZERO; OTHERWISE, THE ACTUAL MEMORY USED WILL BE CLOSE TO THE PREVIOUSLY
+          MENTIONED MEMORY LIMIT, AND THE SCRATCH DISK USAGE WILL BE ROUGHLY PROPORTIONAL TO THE DIFFERENCE
+          BETWEEN THE ESTIMATED "MEMORY TO MINIMIZE I/O" AND THE MEMORY UPPER LIMIT. HOWEVER ACCURATE
+          ESTIMATE OF THE SCRATCH DISK SPACE IS NOT POSSIBLE.
+      (6) USING "*RESTART, WRITE" CAN GENERATE A LARGE AMOUNT OF DATA WRITTEN IN THE WORK DIRECTORY.
+
+
+          THE ANALYSIS HAS BEEN COMPLETED
+
+
+
+                              ANALYSIS COMPLETE
+                              WITH     12 WARNING MESSAGES ON THE DAT FILE
+                              AND      93 WARNING MESSAGES ON THE MSG FILE
+                                       69 WARNINGS ARE FOR NEGATIVE EIGENVALUES
+
+
+
+     JOB TIME SUMMARY
+       USER TIME (SEC)      =      82.    
+       SYSTEM TIME (SEC)    =      5.5    
+       TOTAL CPU TIME (SEC) =      88.    
+       WALLCLOCK TIME (SEC) =          109

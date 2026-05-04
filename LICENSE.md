@@ -1,4 +1,4 @@
-Copyright &copy; 2024 Bibekananda Datta.
+Copyright &copy; 2025 Bibekananda Datta.
 
 ## The 3-Clause BSD License
 
