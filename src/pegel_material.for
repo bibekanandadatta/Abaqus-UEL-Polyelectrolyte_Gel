@@ -340,18 +340,11 @@
      &              jac=.true., vars=vars, opts=solverOpts,
      &              sflag=intVarsFlag)
 
-      if (intVarsFlag .eq. .false.) then
-        call msg%ferror(flag=warn, src='neohookean_flory',
-     &    msg='(kstep, kinc, jelem, intpt): ',
-     &    ivec=[kstep, kinc, jelem, intpt])
-
-        call msg%ferror(flag=warn, src='neohookean_flory',
-     &    msg='Cutting back on time (time, kstep, kinc).',
-     &    ra=time(1), ivec=[kstep, kinc])
-
-        pnewdt = eighth
-        return
-
+      if (.not. intVarsFlag) then
+        call msg%ferror(flag=error, src='neohookean_flory',
+     &      msg='Local iteration for internal variables failed.',
+     &      ivec=[jelem,intpt])
+        call xit
       end if
 
       ! retrieve all the solutions for further usage
@@ -687,6 +680,8 @@
               dJwdFTensor(i,k,l) = dJwdFTensor(i,k,l)
      &            + (Dw/RT) * Cw
      &              * ( FInv(i,k)*CInv(l,j) ) * dMudX(j,1)
+     &            + (Dw/RT) * Cw
+     &              * ( CInv(i,l)*FInv(j,k) ) * dMudX(j,1)
      &            - (Dw/RT) * CInv(i,j) * dMudX(j,1) * dCwdFTensor(k,l)
             end do
           end do
@@ -713,10 +708,12 @@
         do i = 1, nDim
           do k = 1, 3
             do l = 1, 3
-              do j = 1, nDim               ! summation over dummy index j
+              do j = 1, nDim               ! sum over dummy index j
                 dJiondFTensor(n,i,k,l) = dJiondFTensor(n,i,k,l)
      &            + ( Dion(n)/RT ) * Cion(n)
      &              * ( FInv(i,k)*CInv(l,j) ) * dOmgdX(n,j,1)
+     &            + ( Dion(n)/RT ) * Cion(n)
+     &              * ( CInv(i,l)*FInv(j,k) ) * dOmgdX(n,j,1)
      &            - ( Dion(n)/RT ) * CInv(i,j)
      &              * dOmgdX(n,j,1) * dCiondFTensor(n,k,l)
               end do
@@ -736,8 +733,11 @@
       ! (12.3) calculate dJion/dOmg
       dJidOmg     = zero
       do k = 1, nIons
-        dJidOmg(k,k,:,:) = - (Dion(k)/RT) *
-     &        matmul(CInv(1:nDim,1:nDim),dOmgdX(k,:,:)) * dCiondOmg(k,k)
+        do l = 1, nIons
+          dJidOmg(k,l,:,:) = - (Dion(k)/RT) *
+     &          matmul(CInv(1:nDim,1:nDim),dOmgdX(k,:,:))
+     &          * dCiondOmg(l,k)
+        end do
       end do
 
       !!!!!!!!!!!!!!!!! END ELEMENT TANGENT QUANTITITES !!!!!!!!!!!!!!!!

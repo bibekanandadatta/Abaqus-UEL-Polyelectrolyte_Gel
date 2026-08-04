@@ -34,14 +34,6 @@
           real(wp), intent(out)       :: Nxi(:), dNdxi(:,:)
         end subroutine calcInterpFunc
 
-        module subroutine faceNodes(elem,face,nFaceNodes,list)
-          implicit none
-          type(element), intent(in)   :: elem
-          integer, intent(in)         :: face
-          integer, intent(out)        :: nFaceNodes
-          integer, intent(out)        :: list(*)
-        end subroutine faceNodes
-
       end interface
 
       end module lagrange_element
@@ -163,17 +155,17 @@
 
       if (nNode .eq. 3) then        ! 3-noded tri3 linear element
         ! shape functions
-        Nxi(1) = xi
-        Nxi(2) = eta
-        Nxi(3) = one - xi - eta
+        Nxi(1) = one - xi - eta
+        Nxi(2) = xi
+        Nxi(3) = eta
 
         ! the first derivatives of the shape functions dN/dxi (3x2)
-        dNdxi(1, 1) = one
-        dNdxi(1, 2) = zero
-        dNdxi(2, 1) = zero
-        dNdxi(2, 2) = one
-        dNdxi(3, 1) = -one
-        dNdxi(3, 2) = -one
+        dNdxi(1, 1) = -one
+        dNdxi(1, 2) = -one
+        dNdxi(2, 1) = one
+        dNdxi(2, 2) = zero
+        dNdxi(3, 1) = zero
+        dNdxi(3, 2) = one
 
       !              A eta (=xi_2)
       !              |
