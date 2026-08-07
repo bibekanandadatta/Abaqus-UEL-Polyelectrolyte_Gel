@@ -1,5 +1,6 @@
 *Heading
 ************************************************************************
+** PARAMETERS (SI UNIT SYSTEM)
 ** First run a free swelling simulation with a large plate_height
 ** Means deactivate the compression step
 ** Estimate the free swelling from the first run
@@ -67,17 +68,17 @@ initOmg2    = Omg0_2 + RT*log(Cion2_gel/Cw0_gel)
 **
 Cw_sol        = 55000.0
 **
-Cion1_sol     = 50.0
-Cion2_sol     = 50.0
+Cion1_sol     = 250.0
+Cion2_sol     = 250.0
 **
 mu_sol        = mu0 - RT/Cw_sol*(Cion1_sol + Cion2_sol)
 omg1_sol      = Omg0_1 + RT*log(Cion1_sol/Cw_sol)
 omg2_sol      = Omg0_2 + RT*log(Cion2_sol/Cw_sol)
 **
-force         = 10.0
-plate_height  = 4.90e-3
-disp          = 2.0e-3
+plate_height  = 4.28e-3
 plate_length  = 12.5e-3
+force         = 13.07
+right_disp    = 3.45e-3
 **
 *************************************************************************
 ** time parameters
@@ -91,10 +92,10 @@ tRamp_swl       = 0.1
 dtInit_swl      = 1.0e-3
 dtMax_swl       = 0.2
 **
-t_compress      = 1200.0
+t_compress      = 12*3600.0
 tRamp_comp      = 10.0
 dtInit_comp     = 1.0e-6
-dtMax_comp      = 10.0
+dtMax_comp      = 300.0
 **
 dtMin           = 1.0e-15
 **
@@ -1344,7 +1345,7 @@ Top
 *Node
 1000, 0, <plate_height>
 *Nset, Nset=RigidRef
-1000, 
+1000,
 *Surface, type=SEGMENTS, name=RigidSurf
 START, <plate_length>, <plate_height>
 LINE, 0, <plate_height>
@@ -1359,22 +1360,22 @@ TopSurf,RigidSurf
 0.0
 *Surface Behavior, pressure-overclosure=hard
 **
-*************************************************************************** 
-** MATERIAL DEFINITION 
+***************************************************************************
+** MATERIAL DEFINITION
 ***************************************************************************
 ** Material properties for the Swellable Gel Elements
 *uel property,elset=all
-** Rgas Fcon theta phi0 rho Gshear kappa lam_L 
+** Rgas Fcon theta phi0 rho Gshear kappa lam_L
 <Rgas>, <Fcon>, <theta>, <phi0>, <rho>, <Gshear>, <kappa>, <pKa>,
 ** Cp_fx Vp Zp mu0 Vw chi Dw Cion(k)
 <Cp_fix>, <Vp>, <Zp>, <mu0>, <Vw>, <chi>, <Dw>, <Cion1_gel>,
 ** Cion_gel(k) ... Omg0(k) ... Vion(k)
 <Omg0_1>, <Vion_1>, <Zion_1>, <Dion_1>, <Cion2_gel>, <Omg0_2>, <Vion_2>, <Zion_2>,
-** Zion(k) ... Dion(k) nInt fbar matID nIonProps nPostVars 
+** Zion(k) ... Dion(k) nInt fbar matID nIonProps nPostVars
 <Dion_2>, <nInt>, <fbar>, <matID>, <nIonProps>, <nPostVars>
 **
 ***************************************************************************
-*Solid section, elset=ElDummy, material=DummyMaterial 
+*Solid section, elset=ElDummy, material=DummyMaterial
 *Material, name=DummyMaterial
 *Elastic
 1.e-20
@@ -1406,15 +1407,13 @@ TopSurf,RigidSurf
 *Amplitude, name=ForceAmp
 0.0, 0.0, <tRamp_comp>, <force>
 **
-*Amplitude, name=DispAmp
-0.0, 0.0, <tRamp_comp>, <disp>
 ************************************************************************
 ** INITIAL CONDITIONS
 ************************************************************************
 ** Define the initial chemical potential
 *Initial conditions, type=temperature
 all, <initMU>, <initOmg1>, <initOmg2>
-** Define an arbitrary initial condition for the ‘‘extra’’ element. 
+** Define an arbitrary initial condition for the ‘‘extra’’ element.
 *Initial conditions, type=temperature
 extraElement, 0.0
 ************************************************************************
@@ -1441,7 +1440,7 @@ extraElement,11,11,0.0
 *Restart, write, overlay
 *Output, field, frequency=2, time marks=no
 *node output, nset=all
-u, nt, rf   
+u, nt, rf
 ** specify the user-defined output for the dummy element set
 *element output, elset=elDummy
 uvarm, le
@@ -1460,6 +1459,7 @@ uvarm, le
 *Boundary, op=new
 left,1,1,0.0
 bottom,2,2,0.0
+right,1,1,<right_disp>
 RigidRef,encastre
 ** direct amplitude BC
 *Boundary, amplitude=mu_init_to_sol, op=new
@@ -1476,7 +1476,7 @@ extraElement,11,11,0.0
 *Restart, write, overlay
 *Output, field, frequency=2, time marks=no
 *node output, nset=all
-u, nt, rf   
+u, nt, rf
 ** specify the user-defined output for the dummy element set
 *element output, elset=elDummy
 uvarm, le
@@ -1495,6 +1495,7 @@ uvarm, le
 *Boundary, op=new
 left,1,1,0.0
 bottom,2,2,0.0
+right,1,1,<right_disp>
 **
 right, 11, 11, <mu_sol>
 right, 12, 12, <omg1_sol>
@@ -1506,9 +1507,6 @@ RigidRef,3,6,0.0
 *Cload, amplitude=ForceAmp
 RigidRef, 2, -1.0
 **
-** *Boundary, amplitude=DispAmp, OP=New
-** RigidRef,2,2,-1.0
-**
 *Boundary, op=new
 extraElement,encastre
 extraElement,11,11,0.0
@@ -1516,7 +1514,7 @@ extraElement,11,11,0.0
 *Restart, write, overlay
 *Output, field, frequency=1, time marks=no
 *node output, nset=all
-u, nt, rf   
+u, nt, rf
 *node output, nset=RigidRef
 u,rf
 ** specify the user-defined output for the dummy element set
