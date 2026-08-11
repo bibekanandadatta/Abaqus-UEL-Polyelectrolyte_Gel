@@ -1,6 +1,9 @@
 # Abaqus-UEL-Polyelectrolyte_Gel
 
-Abaqus/Standard user element (UEL) subroutine for coupled electro-chemo-mechanics of polyelectrolyte hydrogels.
+Abaqus/Standard user element (UEL) subroutine for coupled electro-chemo-mechanics of polyelectrolyte hydrogels. The pre-print of the manuscript is available on arXiv and it is under consideration for peer-reviewed publications.
+
+[![arXiv](https://img.shields.io/badge/arXiv-2608.07638-b31b1b.svg)](https://doi.org/10.48550/arXiv.2608.07638)
+
 
 ## Obtaining the repository
 
@@ -123,4 +126,28 @@ To run the code, use
 
 ### `docs`
 
-This directory contains the preprint of the article and supplementary material. The supplementary material provides a brief description of the different modules and detailed user guidelines on how to prepare the input file and use the code in Abaqus/Standard. For full Abaqus documentation, visit <https://help.3ds.com>. You may need to create an account to access the online documentation.
+This directory contains the arXiv preprint of the article and supplementary material. The supplementary material provides a brief description of the different modules and detailed user guidelines on how to prepare the input file and use the code in Abaqus/Standard. For full Abaqus documentation, visit <https://help.3ds.com>. You may need to create an account to access the online documentation.
+
+
+## Citation
+
+If you use this repository (documentation or source code), please consider citing this from the following:
+
+APA format:
+```
+Datta, B., Zimmerman, B. K., & Nguyen, T. D. (2026). A transient nonlinear finite element framework and implementation of coupled electro-chemo-mechanics of polyelectrolyte hydrogels. arXiv.org. https://arxiv.org/abs/2608.07638.
+```
+
+BibTeX:
+``` bibtex
+@misc{datta2026transientnonlinearfiniteelement,
+      title={A transient nonlinear finite element framework and implementation of coupled electro-chemo-mechanics of polyelectrolyte hydrogels}, 
+      author={Bibekananda Datta and Brandon K. Zimmerman and Thao D. Nguyen},
+      year={2026},
+      eprint={2608.07638},
+      archivePrefix={arXiv},
+      primaryClass={cond-mat.soft},
+      doi={10.48550/arXiv.2608.07638},
+      url={https://arxiv.org/abs/2608.07638}, 
+}
+```
